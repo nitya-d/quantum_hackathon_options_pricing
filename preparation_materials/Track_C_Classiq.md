@@ -21,7 +21,7 @@ To prepare for this challenge, you need to understand both the underlying theore
 ### 2. Mastering the Classiq Platform
 To successfully build and optimize the algorithm, you must be comfortable with Classiq's synthesis engine. 
 *   **[Getting Started with Classiq - Classiq 101](https://docs.classiq.io/latest/getting-started/):** The foundational interactive tutorials for the platform. Start here if you are new to Classiq.
-*   **[Classiq Documentation](https://docs.classiq.io/latest/):** Your primary technical reference. Pay special attention to documentation regarding state preparation (like `inplace_prepare_state()`) and circuit optimization constraints.
+*   **[Classiq Documentation](https://docs.classiq.io/latest/):** Your primary technical reference. 
 *   **[The Classiq Library](https://docs.classiq.io/latest/explore/):** A repository containing existing implementations of algorithms and tutorials. Reviewing these will give you a massive head start on how to structure complex quantum programs syntactically.
 
 ### 3. Community & Technical Support

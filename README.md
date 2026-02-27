@@ -1,80 +1,73 @@
-# Q-volution Hackathon 2026: Official Resources
+# Track B: Quantum Machine Learning for Options Pricing
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Hosted By: Girls in Quantum](https://img.shields.io/badge/Org-Girls%20in%20Quantum-blueviolet)](https://girlsinquantum.com)
+## Team Setup & Environment
 
-**Event Dates:** February 23rd – March 1st, 2026  
-**Status:** 🟢 Active
+We use a Python **venv** (not conda) to avoid corporate network issues with Anaconda channels.
 
-## 📖 About
+### Prerequisites
 
-Welcome to the official open-source repository for the **Q-volution Hackathon 2026**.
+- Python 3.11+ installed ([python.org](https://www.python.org/downloads/))
+- Git
+- VS Code with the Python and Jupyter extensions
 
-Girls in Quantum is a global, youth-led initiative dedicated to making quantum education accessible, especially for girls and young students. This repository mainly hosts learning resources for our participants.
+### Steps
 
-Our mission is to bridge the gap between theory and practice. Participants will use **open-source SDKs** (PyQuil, MerLin, Qiskit) to solve real-world problems in energy, finance, and simulation.
+1. **Clone the repo** (use the fork URL your team lead shared)
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/quantum_hackathon_options_pricing.git
+   cd quantum_hackathon_options_pricing
+   ```
 
----
+2. **Create a virtual environment**
+   ```bash
+   python -m venv .venv
+   ```
 
-## 🏆 Challenge Tracks & Stack
+3. **Activate it**
 
-We have partnered with leading quantum providers to design four technical tracks.
+   - **Windows (cmd / Anaconda Prompt):**
+     ```bash
+     .venv\Scripts\activate
+     ```
+   - **Windows (PowerShell):**
+     ```powershell
+     .venv\Scripts\Activate.ps1
+     ```
+   - **macOS / Linux:**
+     ```bash
+     source .venv/bin/activate
+     ```
 
-> **Note:** Full problem statements will be released on Feb 23rd. Use the `preparation-materials/` folder to study the required libraries now.
+4. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### ⚡ Track A: Energy Grid Optimization
+   > **Note:** If `torch` fails with a DLL error on Windows, install the [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe), restart, and try again.
 
-- **Sponsor:** [Rigetti Computing](https://www.rigetti.com/)
-- **Mission:** Maximize the "Power Energy Section" (MPES) to prevent blackouts using Weighted Max-Cut problems on real-world grid data (South Carolina dataset).
-- **Open Source Stack:** `PyQuil`, `NetworkX`, `SciPy`.
-- **Hardware:** Top 10 teams gain access to the **84-qubit Ankaa-3** system.
-- **Difficulty:** Advanced
+5. **Register the Jupyter kernel**
+   ```bash
+   python -m ipykernel install --user --name quantum --display-name "Python (quantum)"
+   ```
 
-### 💸 Track B: Quantum Machine Learning (QML) in Finance
+6. **Select the kernel in VS Code**
 
-- **Sponsor:** [Quandela](https://quandela.com/)
-- **Mission:** Implement a QML model using Reservoir Computing to predict put/call option prices.
-- **Open Source Stack:** `MerLin` (Python), `PyTorch`.
-- **Difficulty:** Intermediate (ML background preferred)
+   Open a notebook → click the kernel picker (top-right) → **Select Another Kernel** → **Python Environments** → pick **quantum** or **Python (quantum)**.
 
-### 🧪 Track C: Algorithms & Differential Equations
+### Troubleshooting
 
-- **Sponsor:** [Classiq](https://www.classiq.io/)
-- **Mission:** Solve Linear Differential Equations using the Tao Xin (2020) algorithm to simulate kinetic/potential energies of a quantum harmonic oscillator.
-- **Open Source Stack:** `Classiq SDK` (Python), `Jupyter`.
-- **Difficulty:** Intermediate
-
-### 🌍 Track D: Social Impact (No-Code)
-
-- **Sponsor:** [Infleqtion](https://www.infleqtion.com/)
-- **Mission:** Design a quantum solution for a social cause using Design Thinking principles.
-- **Focus:** Accessible to high schoolers and beginners. No coding experience required.
-
----
-
-## 📂 Repository Structure
-
-- [`/preparation-materials`](./preparation-materials): **Start Here.** Study guides and reading lists for the specific algorithms (QAOA, QML, ODEs).
-- `/challenges`:  Detailed PDF descriptions of each track. We're hoping to host these on Aqora!
-- `/datasets`: Links to the public datasets used in Track A and B. Again, on Aqora!
-
-## 🤝 Community & Support
-
-- **Discord:** [Join the Community](https://discord.com/invite/xE9mfGSy)
-- **Website:** [girlsinquantum.com](https://www.girlsinquantum.com)
-- **Code of Conduct:** Please review our [Code of Conduct](https://www.girlsinquantum.com/terms).
+| Problem | Fix |
+|---|---|
+| `numpy.core.multiarray failed to import` | `pip install "numpy<2"` (already pinned in requirements.txt) |
+| PyTorch DLL error (`c10.dll`) | Install [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) and restart |
+| Conda channels 403 Forbidden | Don't use conda — follow the venv steps above |
 
 ---
 
-## 🙏 Acknowledgments
+## Hackathon Resources
 
-We are proud to be supported by the leaders of the quantum industry who are investing in the open-source workforce of tomorrow:
+See [HACKATHON_RESOURCES.md](HACKATHON_RESOURCES.md) for the full hackathon overview, all track descriptions, and community links.
 
-- **Rigetti Computing**
-- **Quandela**
-- **Classiq**
-- **Infleqtion UK**
+## Track B Study Materials
 
-```
-
-```
+See [preparation_materials/Track_B_Quandela.md](preparation_materials/Track_B_Quandela.md) for the full reading list, SDK docs, and technical constraints.

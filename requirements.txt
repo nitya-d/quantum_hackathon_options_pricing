@@ -7,3 +7,4 @@ scikit-learn
 jupyter
 ipykernel
 numpy<2
+perceval-quandela

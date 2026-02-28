@@ -85,7 +85,7 @@ def parse_args() -> argparse.Namespace:
         help="Global scaling applied before angle encoding.",
     )
 
-    # Classical MLP head
+    # Classical head
     parser.add_argument(
         "--hidden_dims",
         type=int,
@@ -124,6 +124,14 @@ def parse_args() -> argparse.Namespace:
         help="Number of training epochs.",
     )
 
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        default="mlp",
+        choices=["mlp", "ridge", "lgbm"],
+        help="Classical backend to use on top of quantum features.",
+    )
+
     # Misc
     parser.add_argument(
         "--device",
@@ -136,16 +144,18 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_configs(args: argparse.Namespace) -> Tuple[DataConfig, ReservoirConfig, MLPConfig]:
+    # Ensure reservoir respects hardware constraints and matches lookback window.
+    n_modes = max(args.n_modes, args.lookback)
+
     data_config = DataConfig(
         data_path=Path(args.data_path),
         target_column=args.target_column,
         lookback_window=args.lookback,
         test_size=args.test_size,
         use_log_returns=not args.no_log_returns,
+        n_modes=n_modes,
     )
 
-    # Ensure reservoir respects hardware constraints and matches lookback window.
-    n_modes = max(args.n_modes, data_config.lookback_window)
     res_config = ReservoirConfig(
         n_modes=n_modes,
         n_photons=args.n_photons,
@@ -162,6 +172,7 @@ def build_configs(args: argparse.Namespace) -> Tuple[DataConfig, ReservoirConfig
         batch_size=args.batch_size,
         n_epochs=args.epochs,
         device=args.device,
+        classical_backend=args.model_type,
     )
 
     return data_config, res_config, mlp_config

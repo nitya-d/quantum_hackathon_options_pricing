@@ -12,21 +12,37 @@ The design follows the previous competition architecture:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Tuple
+from typing import Any, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from sklearn.linear_model import Ridge
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch.utils.data import TensorDataset
 
 from .quantum_reservoir import QuantumReservoir
 
+try:
+    from lightgbm import LGBMRegressor
+
+    HAS_LGBM = True
+except ImportError:  # pragma: no cover - optional dependency
+    LGBMRegressor = None  # type: ignore
+    HAS_LGBM = False
+
 
 @dataclass
 class MLPConfig:
-    """Configuration for the classical MLP head."""
+    """
+    Configuration for the classical head.
+
+    Supports three backends:
+    - 'mlp'   : PyTorch MLPRegressor (default)
+    - 'ridge' : scikit-learn Ridge regression
+    - 'lgbm'  : LightGBM LGBMRegressor
+    """
 
     hidden_dims: Tuple[int, ...] = (64, 32)
     dropout: float = 0.1
@@ -35,6 +51,12 @@ class MLPConfig:
     batch_size: int = 64
     n_epochs: int = 50
     device: str = "cpu"
+
+    classical_backend: str = "mlp"  # 'mlp', 'ridge', 'lgbm'
+    ridge_alpha: float = 1.0
+    lgbm_num_leaves: int = 31
+    lgbm_learning_rate: float = 0.05
+    lgbm_n_estimators: int = 100
 
 
 class MLPRegressor(nn.Module):
@@ -77,11 +99,17 @@ class HybridQMLModel:
         self.mlp_config = mlp_config
 
         self.device = torch.device(mlp_config.device)
-        self.model: MLPRegressor | None = None
+        self.backend = mlp_config.classical_backend.lower()
 
-    def _ensure_model(self, feature_dim: int) -> None:
-        if self.model is None:
-            self.model = MLPRegressor(feature_dim, self.mlp_config).to(self.device)
+        # Models for different backends
+        self.model_torch: MLPRegressor | None = None
+        self.model_sklearn: Any | None = None
+
+    def _ensure_mlp(self, feature_dim: int) -> None:
+        if self.model_torch is None:
+            self.model_torch = MLPRegressor(feature_dim, self.mlp_config).to(
+                self.device
+            )
 
     def _to_tensor(self, x: np.ndarray) -> torch.Tensor:
         return torch.from_numpy(x.astype(np.float32)).to(self.device)
@@ -91,61 +119,100 @@ class HybridQMLModel:
     # ------------------------------------------------------------------
     def fit(self, X_train: np.ndarray, y_train: np.ndarray) -> None:
         """
-        Train the classical MLP on top of quantum reservoir features.
+        Train the classical head on top of quantum reservoir features.
         """
         # Step 1: extract quantum features (no gradients).
         X_q = self.quantum_reservoir.get_reservoir_states(X_train)
 
-        feature_dim = X_q.shape[1]
-        self._ensure_model(feature_dim)
-        assert self.model is not None
+        backend = self.backend
 
-        X_tensor = self._to_tensor(X_q)
-        y_tensor = self._to_tensor(y_train).view(-1)
+        if backend == "mlp":
+            feature_dim = X_q.shape[1]
+            self._ensure_mlp(feature_dim)
+            assert self.model_torch is not None
 
-        dataset = TensorDataset(X_tensor, y_tensor)
-        loader = TorchDataLoader(
-            dataset, batch_size=self.mlp_config.batch_size, shuffle=True
-        )
+            X_tensor = self._to_tensor(X_q)
+            y_tensor = self._to_tensor(y_train).view(-1)
 
-        optimizer = optim.AdamW(
-            self.model.parameters(),
-            lr=self.mlp_config.learning_rate,
-            weight_decay=self.mlp_config.weight_decay,
-        )
-        loss_fn = nn.MSELoss()
+            dataset = TensorDataset(X_tensor, y_tensor)
+            loader = TorchDataLoader(
+                dataset, batch_size=self.mlp_config.batch_size, shuffle=True
+            )
 
-        self.model.train()
-        for epoch in range(self.mlp_config.n_epochs):
-            epoch_loss = 0.0
-            for batch_X, batch_y in loader:
-                optimizer.zero_grad()
-                preds = self.model(batch_X)
-                loss = loss_fn(preds, batch_y)
-                loss.backward()
-                optimizer.step()
-                epoch_loss += loss.item() * batch_X.size(0)
+            optimizer = optim.AdamW(
+                self.model_torch.parameters(),
+                lr=self.mlp_config.learning_rate,
+                weight_decay=self.mlp_config.weight_decay,
+            )
+            loss_fn = nn.MSELoss()
 
-            epoch_loss /= len(dataset)
-            # Optional: simple progress print for debugging
-            print(f"[Epoch {epoch + 1}/{self.mlp_config.n_epochs}] "
-                  f"Train MSE: {epoch_loss:.6f}")
+            self.model_torch.train()
+            for epoch in range(self.mlp_config.n_epochs):
+                epoch_loss = 0.0
+                for batch_X, batch_y in loader:
+                    optimizer.zero_grad()
+                    preds = self.model_torch(batch_X)
+                    loss = loss_fn(preds, batch_y)
+                    loss.backward()
+                    optimizer.step()
+                    epoch_loss += loss.item() * batch_X.size(0)
+
+                epoch_loss /= len(dataset)
+                # Optional: simple progress print for debugging
+                print(f"[Epoch {epoch + 1}/{self.mlp_config.n_epochs}] "
+                      f"Train MSE: {epoch_loss:.6f}")
+
+        elif backend == "ridge":
+            self.model_sklearn = Ridge(alpha=self.mlp_config.ridge_alpha)
+            self.model_sklearn.fit(X_q, y_train.astype(np.float64))
+
+        elif backend == "lgbm":
+            if not HAS_LGBM:
+                raise ImportError(
+                    "LightGBM backend selected but lightgbm is not installed. "
+                    "Install with `pip install lightgbm`."
+                )
+            self.model_sklearn = LGBMRegressor(
+                num_leaves=self.mlp_config.lgbm_num_leaves,
+                learning_rate=self.mlp_config.lgbm_learning_rate,
+                n_estimators=self.mlp_config.lgbm_n_estimators,
+            )
+            self.model_sklearn.fit(X_q, y_train.astype(np.float64))
+
+        else:
+            raise ValueError(
+                f"Unknown classical_backend '{backend}'. "
+                "Supported: 'mlp', 'ridge', 'lgbm'."
+            )
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """
         Predict using the trained hybrid model.
         """
-        if self.model is None:
-            raise RuntimeError("Model has not been trained yet. Call fit() first.")
-
         X_q = self.quantum_reservoir.get_reservoir_states(X)
-        X_tensor = self._to_tensor(X_q)
 
-        self.model.eval()
-        with torch.no_grad():
-            preds = self.model(X_tensor)
+        backend = self.backend
 
-        return preds.detach().cpu().numpy().astype(np.float32)
+        if backend == "mlp":
+            if self.model_torch is None:
+                raise RuntimeError("MLP backend not trained. Call fit() first.")
+            X_tensor = self._to_tensor(X_q)
+            self.model_torch.eval()
+            with torch.no_grad():
+                preds = self.model_torch(X_tensor)
+            return preds.detach().cpu().numpy().astype(np.float32)
+
+        elif backend in {"ridge", "lgbm"}:
+            if self.model_sklearn is None:
+                raise RuntimeError(f"{backend} backend not trained. Call fit() first.")
+            preds = self.model_sklearn.predict(X_q)
+            return preds.astype(np.float32)
+
+        else:
+            raise ValueError(
+                f"Unknown classical_backend '{backend}'. "
+                "Supported: 'mlp', 'ridge', 'lgbm'."
+            )
 
     def evaluate(self, X: np.ndarray, y: np.ndarray) -> dict:
         """

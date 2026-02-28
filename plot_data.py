@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-DATA_FILE = "019c9f39-e697-7fa1-9725-d93bdd138124.parquet"
+DATA_FILE = os.path.join("data", "019c9f39-e697-7fa1-9725-d93bdd138124.parquet")
 OUTPUT_DIR = "plots"
 
 

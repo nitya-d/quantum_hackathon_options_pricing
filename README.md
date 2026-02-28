@@ -5,7 +5,7 @@ The data is stored as a single Parquet file and a small plotting script is provi
 
 ### Folder structure
 
-- **`019c9f39-e697-7fa1-9725-d93bdd138124.parquet`**: Local copy of the Quandela swaption dataset downloaded from Aqora.
+- **`data/019c9f39-e697-7fa1-9725-d93bdd138124.parquet`**: Local copy of the Quandela swaption dataset downloaded from Aqora.
 - **`plot_data.py`**: Utility script that reads the Parquet file and generates basic plots.
 - **`plots/`**: Output directory where generated figures are saved (created automatically).
 - **`.venv/`**: Local Python virtual environment (created automatically when running the setup command below).
@@ -48,7 +48,7 @@ cd q-volution2026_quandela
 
 This will:
 
-- Read `019c9f39-e697-7fa1-9725-d93bdd138124.parquet`.
+- Read `data/019c9f39-e697-7fa1-9725-d93bdd138124.parquet`.
 - Create the folder `plots/` if it does not exist.
 - Save two PNG figures:
   - `plots/tenor10_time_series.png`: time series for `Tenor : 10` at selected maturities (`1`, `5`, `10`, `30` years).

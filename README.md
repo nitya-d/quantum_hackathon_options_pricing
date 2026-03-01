@@ -6,7 +6,7 @@ We use a Python **venv** (not conda) to avoid corporate network issues with Anac
 
 ### Prerequisites
 
-- Python 3.11+ installed ([python.org](https://www.python.org/downloads/))
+- Python 3.11-3.13 installed ([python.org](https://www.python.org/downloads/))
 - Git
 - VS Code with the Python and Jupyter extensions
 

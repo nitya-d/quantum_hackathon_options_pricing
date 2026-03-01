@@ -1,15 +1,9 @@
 """
 Data loading and preprocessing for the Q-volution 2026 Quandela track.
 
-This module adapts the previous QRC data pipeline to the new Parquet
-swaption dataset delivered for the hackathon.
-
-Key responsibilities
---------------------
-- Load `data/019c9f39-e697-7fa1-9725-d93bdd138124.parquet`.
-- Select a specific (Tenor, Maturity) column as the target price series.
-- Build supervised time-series windows `(X, y)` with a configurable lookback.
-- Apply optional log-return transformation and z-score normalization (train only).
+This module loads train and test CSV files (separate files), selects
+date and target columns, builds supervised time-series windows, and
+applies optional log-return transformation and z-score normalization.
 """
 
 from __future__ import annotations
@@ -23,19 +17,20 @@ import pandas as pd
 from sklearn.decomposition import PCA
 
 
-DEFAULT_DATA_PATH = Path("data") / "019c9f39-e697-7fa1-9725-d93bdd138124.parquet"
+DEFAULT_TRAIN_PATH = Path("data") / "train.xlsx"
+DEFAULT_TEST_PATH = Path("data") / "test_template.xlsx"
 
 
 @dataclass
 class DataConfig:
     """Configuration for loading and preprocessing the swaption dataset."""
 
-    data_path: Path = DEFAULT_DATA_PATH
+    train_path: Path = DEFAULT_TRAIN_PATH
+    test_path: Path = DEFAULT_TEST_PATH
     # Can be a single column or a list of columns for multivariate inputs
     target_column: Union[str, Sequence[str]] = "Tenor : 10; Maturity : 10"
     date_column: str = "Date"
     lookback_window: int = 8
-    test_size: float = 0.2
     use_log_returns: bool = True
     normalize_method: str = "zscore"  # currently only 'zscore' is implemented
     max_samples: Optional[int] = None
@@ -43,57 +38,63 @@ class DataConfig:
     n_modes: int = 8
 
     def __post_init__(self) -> None:
-        if not (0.0 < self.test_size < 1.0):
-            raise ValueError("test_size must be in (0, 1).")
         if self.lookback_window <= 0:
             raise ValueError("lookback_window must be positive.")
         if self.n_modes <= 0:
             raise ValueError("n_modes must be positive.")
+        if isinstance(self.train_path, str):
+            self.train_path = Path(self.train_path)
+        if isinstance(self.test_path, str):
+            self.test_path = Path(self.test_path)
 
 
 class DataLoader:
     """
-    Parquet-based data loader for the swaption dataset.
+    CSV-based data loader with separate train and test files.
 
-    The loader produces:
-    - X_train, X_test: arrays of shape [n_samples, lookback_window]
-    - y_train, y_test: arrays of shape [n_samples]
-
-    These are designed to match the QuantumReservoir interface, which expects
-    classical inputs with dimensionality <= number of photonic modes.
+    Produces:
+    - X_train, X_test: arrays of shape [n_samples, n_features] (after PCA if applied)
+    - y_train: array of shape [n_samples]
+    - y_test: array of shape [n_test] or None if test file has no labels
     """
 
     def __init__(self, config: DataConfig) -> None:
         self.config = config
 
-        # Normalization parameters (computed from training data only)
         self.feature_mean_: Optional[float] = None
         self.feature_std_: Optional[float] = None
         self.target_mean_: Optional[float] = None
         self.target_std_: Optional[float] = None
-        # PCA model (fitted on training set only, if used)
         self.pca_: Optional[PCA] = None
-        # When use_log_returns is True: last raw price before the first test step (for reconstructing price trajectories)
+        # Last raw price in training set (for log-return → price reconstruction)
         self.last_price_before_test_: Optional[float] = None
 
     # ------------------------------------------------------------------
     # Core loading utilities
     # ------------------------------------------------------------------
-    def _load_raw_series(self) -> pd.DataFrame:
-        """Load and sort the target price series (one or more columns)."""
-        data_path = self.config.data_path
-        if not data_path.exists():
-            raise FileNotFoundError(f"Data file not found: {data_path}")
+    def _load_csv(
+        self, path: Path, required_targets: bool = True
+    ) -> pd.DataFrame:
+        """
+        Load a CSV or Excel file and return a DataFrame with date_column and target columns only.
+        Drops optional non-numeric columns (e.g. 'Type'). Sorted by date.
+        """
+        if not path.exists():
+            raise FileNotFoundError(f"Data file not found: {path}")
 
-        df = pd.read_parquet(data_path)
+        path_str = str(path)
+        if path_str.lower().endswith(".csv"):
+            df = pd.read_csv(path)
+        else:
+            # Excel: read first sheet
+            df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
 
         if self.config.date_column not in df.columns:
             raise ValueError(
-                f"Expected date column '{self.config.date_column}' in dataset. "
+                f"Expected date column '{self.config.date_column}' in {path.name}. "
                 f"Available columns: {list(df.columns)}"
             )
 
-        # Normalize target_column to a list of column names
         if isinstance(self.config.target_column, str):
             target_cols = [self.config.target_column]
         else:
@@ -102,36 +103,38 @@ class DataLoader:
         missing = [c for c in target_cols if c not in df.columns]
         if missing:
             raise ValueError(
-                f"Target column(s) {missing} not found. "
+                f"Target column(s) {missing} not found in {path.name}. "
                 f"Please choose among: {list(df.columns)}"
             )
 
-        # Ensure proper datetime sorting
-        df = df.copy()
+        keep = [self.config.date_column] + target_cols
+        df = df[keep].copy()
         df[self.config.date_column] = pd.to_datetime(
             df[self.config.date_column], dayfirst=True, errors="coerce"
         )
         df = df.sort_values(self.config.date_column)
-        df = df.dropna(subset=[self.config.date_column] + target_cols)
 
-        return df[target_cols].astype(float)
+        if required_targets:
+            df = df.dropna(subset=target_cols)
+        # else: keep rows even if target is NaN (for test with missing labels)
+
+        return df
 
     def _to_log_returns(self, values: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
         """Convert price series or frame to log returns."""
         returns = np.log(values / values.shift(1))
         returns = returns.replace([np.inf, -np.inf], np.nan).dropna()
-        # Always return a DataFrame for downstream consistency
         return returns if isinstance(returns, pd.DataFrame) else returns.to_frame()
 
     def _build_windows(
-        self, frame: pd.DataFrame
+        self,
+        frame: pd.DataFrame,
+        allow_nan_target: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Build supervised windows from a (possibly multivariate) time series.
-
-        For each index t >= lookback_window:
-            X_t = frame[t - lookback_window : t, :]
-            y_t = frame[t, 0]   # first column as target
+        If allow_nan_target is True, rows with NaN target are still included;
+        y will contain np.nan for those indices.
         """
         values = frame.to_numpy(dtype=np.float64)  # shape: [T, C]
         lookback = self.config.lookback_window
@@ -140,13 +143,14 @@ class DataLoader:
         y_list = []
 
         for t in range(lookback, len(values)):
-            window = values[t - lookback : t, :]  # [lookback, C]
-            target = values[t, 0]  # use first column as scalar target
-            if np.any(~np.isfinite(window)) or not np.isfinite(target):
+            window = values[t - lookback : t, :]
+            target = values[t, 0]
+            if np.any(~np.isfinite(window)):
                 continue
-            # Flatten [lookback, C] -> [lookback * C]
+            if not allow_nan_target and not np.isfinite(target):
+                continue
             X_list.append(window.reshape(-1))
-            y_list.append(target)
+            y_list.append(target if np.isfinite(target) else np.nan)
 
         if not X_list:
             raise ValueError("Not enough valid data to build time-series windows.")
@@ -160,91 +164,100 @@ class DataLoader:
     # ------------------------------------------------------------------
     def load_and_preprocess(
         self,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
         """
-        Load the Parquet dataset and return train/test splits.
-
-        Returns
-        -------
-        X_train, X_test, y_train, y_test : np.ndarray
-            Arrays with shapes:
-            - X_*: [n_samples, lookback_window]
-            - y_*: [n_samples]
+        Load train and test CSVs and return (X_train, X_test, y_train, y_test).
+        y_test is None if the test file has no valid target labels.
         """
-        raw = self._load_raw_series()
-
-        if self.config.use_log_returns:
-            frame = self._to_log_returns(raw)
+        if isinstance(self.config.target_column, str):
+            target_cols = [self.config.target_column]
         else:
-            frame = raw.copy()
+            target_cols = list(self.config.target_column)
 
-        X, y = self._build_windows(frame)
-
-        # Chronological train/test split
-        n_samples = X.shape[0]
-        split_idx = int((1.0 - self.config.test_size) * n_samples)
-        split_idx = max(split_idx, 1)
-
-        X_train = X[:split_idx]
-        y_train = y[:split_idx]
-        X_test = X[split_idx:]
-        y_test = y[split_idx:]
-
-        # Expose last raw price before test set (for log-return → price reconstruction in main)
+        # ----- Train -----
+        raw_train = self._load_csv(self.config.train_path, required_targets=True)
+        train_values = raw_train[target_cols]
         if self.config.use_log_returns:
-            # First test target is the return at frame row (lookback + split_idx); price before it is raw[lookback + split_idx]
-            lookback = self.config.lookback_window
-            idx_last = lookback + split_idx
-            if idx_last < len(raw):
-                self.last_price_before_test_ = float(raw.iloc[idx_last, 0])
-            else:
-                self.last_price_before_test_ = None
+            frame_train = self._to_log_returns(train_values)
+        else:
+            frame_train = train_values.copy()
+
+        X_train, y_train = self._build_windows(frame_train, allow_nan_target=False)
+
+        # Last raw price in train (for reconstructing test prices from log returns)
+        if self.config.use_log_returns and len(raw_train) > 0:
+            self.last_price_before_test_ = float(raw_train[target_cols].iloc[-1, 0])
         else:
             self.last_price_before_test_ = None
 
-        # Optional downsampling for quick experiments
         if self.config.max_samples is not None:
-            max_n = self.config.max_samples
+            max_n = min(self.config.max_samples, X_train.shape[0])
             X_train = X_train[:max_n]
             y_train = y_train[:max_n]
 
-        # Fit normalization on training features and target only (scalar z-score)
+        # ----- Test -----
+        raw_test = self._load_csv(self.config.test_path, required_targets=False)
+        raw_test = raw_test.dropna(subset=target_cols)
+
+        test_values = raw_test[target_cols]
+        if self.config.use_log_returns:
+            frame_test = self._to_log_returns(test_values)
+        else:
+            frame_test = test_values.copy()
+
+        # If test frame is empty or too short, we have no test samples
+        if len(frame_test) < self.config.lookback_window:
+            # Placeholder shape; will be resized after PCA to match train
+            X_test = np.zeros((0, X_train.shape[1]), dtype=np.float32)
+            y_test = None
+        else:
+            X_test, y_test_arr = self._build_windows(
+                frame_test, allow_nan_target=True
+            )
+            has_labels = np.any(np.isfinite(y_test_arr))
+            y_test = y_test_arr if has_labels else None
+
+        # ----- Normalization (fit on train only) -----
         if self.config.normalize_method == "zscore":
             self.feature_mean_ = float(X_train.mean())
             self.feature_std_ = float(X_train.std(ddof=0) + 1e-8)
 
             X_train = (X_train - self.feature_mean_) / self.feature_std_
-            X_test = (X_test - self.feature_mean_) / self.feature_std_
+            if X_test.shape[0] > 0:
+                X_test = (X_test - self.feature_mean_) / self.feature_std_
 
-            # Target normalization
             self.target_mean_ = float(y_train.mean())
             self.target_std_ = float(y_train.std(ddof=0) + 1e-8)
 
             y_train = (y_train - self.target_mean_) / self.target_std_
-            y_test = (y_test - self.target_mean_) / self.target_std_
+            if y_test is not None:
+                y_test = (y_test - self.target_mean_) / self.target_std_
         else:
             raise ValueError(
                 f"Unsupported normalize_method: {self.config.normalize_method}. "
                 "Only 'zscore' is currently implemented."
             )
 
-        # Dimensionality reduction with PCA to respect mode constraints.
-        # If flattened window dimension exceeds n_modes, compress to n_modes.
+        # ----- PCA (fit on train only) -----
         original_dim = X_train.shape[1]
         target_dim = self.config.n_modes
 
         if original_dim > target_dim:
             self.pca_ = PCA(n_components=target_dim)
             X_train = self.pca_.fit_transform(X_train)
-            X_test = self.pca_.transform(X_test)
+            if X_test.shape[0] > 0:
+                X_test = self.pca_.transform(X_test)
+            else:
+                X_test = np.zeros((0, target_dim), dtype=np.float32)
         else:
             self.pca_ = None
+            if X_test.shape[0] == 0:
+                X_test = np.zeros((0, original_dim), dtype=np.float32)
 
-        # Cast to float32 for compatibility with PyTorch / MerLin
         X_train = X_train.astype(np.float32)
         X_test = X_test.astype(np.float32)
         y_train = y_train.astype(np.float32)
-        y_test = y_test.astype(np.float32)
+        if y_test is not None:
+            y_test = y_test.astype(np.float32)
 
         return X_train, X_test, y_train, y_test
-

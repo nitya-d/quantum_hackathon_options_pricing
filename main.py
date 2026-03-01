@@ -2,9 +2,9 @@
 Entry point for Q-volution 2026 (Quandela Track B) QRC pipeline.
 
 This script wires together:
-- Parquet-based swaption data loader
+- CSV-based train/test swaption data loader
 - MerLin-based photonic Quantum Reservoir
-- PyTorch MLP head for option price prediction
+- Classical readout (Ridge/MLP/LightGBM) for option price prediction
 """
 
 from __future__ import annotations
@@ -30,28 +30,34 @@ def parse_args() -> argparse.Namespace:
 
     # Data parameters
     parser.add_argument(
-        "--data_path",
+        "--train_path",
         type=str,
-        default=str(Path("data") / "019c9f39-e697-7fa1-9725-d93bdd138124.parquet"),
-        help="Path to Parquet swaption dataset.",
+        default=str(Path("data") / "train.xlsx"),
+        help="Path to training data (CSV or Excel, e.g. train.csv or train.xlsx).",
+    )
+    parser.add_argument(
+        "--test_path",
+        type=str,
+        default=str(Path("data") / "test_template.xlsx"),
+        help="Path to test data (CSV or Excel, e.g. test_template.csv or test_template.xlsx).",
+    )
+    parser.add_argument(
+        "--date_column",
+        type=str,
+        default="Date",
+        help="Name of the date column in train/test CSVs.",
     )
     parser.add_argument(
         "--target_column",
         type=str,
         default="Tenor : 10; Maturity : 10",
-        help="Parquet column to use as target price series.",
+        help="CSV column to use as target price series.",
     )
     parser.add_argument(
         "--lookback",
         type=int,
         default=8,
         help="Lookback window size for time-series features.",
-    )
-    parser.add_argument(
-        "--test_size",
-        type=float,
-        default=0.2,
-        help="Fraction of samples reserved for testing.",
     )
     parser.add_argument(
         "--no_log_returns",
@@ -144,14 +150,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_configs(args: argparse.Namespace) -> Tuple[DataConfig, ReservoirConfig, MLPConfig]:
-    # Ensure reservoir respects hardware constraints and matches lookback window.
     n_modes = max(args.n_modes, args.lookback)
 
     data_config = DataConfig(
-        data_path=Path(args.data_path),
+        train_path=Path(args.train_path),
+        test_path=Path(args.test_path),
+        date_column=args.date_column,
         target_column=args.target_column,
         lookback_window=args.lookback,
-        test_size=args.test_size,
         use_log_returns=not args.no_log_returns,
         n_modes=n_modes,
     )
@@ -194,80 +200,84 @@ def main() -> None:
     model = HybridQMLModel(reservoir, mlp_config)
     model.fit(X_train, y_train)
 
-    print("=== Evaluating on test set ===")
+    if X_test.shape[0] == 0:
+        print("No test samples (test file has no valid rows after preprocessing). Done.")
+        return
+
     # Predict in normalized space
     y_pred_norm = model.predict(X_test)
 
-    # Inverse-transform targets and predictions back to original scale
     target_mean = getattr(loader, "target_mean_", None)
     target_std = getattr(loader, "target_std_", None)
-
     if target_mean is not None and target_std is not None:
-        y_test_orig = y_test * target_std + target_mean
         y_pred_orig = y_pred_norm * target_std + target_mean
     else:
-        y_test_orig = y_test
         y_pred_orig = y_pred_norm
 
-    # Compute metrics on original scale
-    mse = float(np.mean((y_pred_orig - y_test_orig) ** 2))
-    mae = float(np.mean(np.abs(y_pred_orig - y_test_orig)))
-    rmse = float(np.sqrt(mse))
+    if y_test is not None:
+        print("=== Evaluating on test set ===")
+        if target_mean is not None and target_std is not None:
+            y_test_orig = y_test * target_std + target_mean
+        else:
+            y_test_orig = y_test
 
-    print("Test metrics:")
-    print(f"  mse: {mse:.6f}")
-    print(f"  rmse: {rmse:.6f}")
-    print(f"  mae: {mae:.6f}")
+        mse = float(np.mean((y_pred_orig - y_test_orig) ** 2))
+        mae = float(np.mean(np.abs(y_pred_orig - y_test_orig)))
+        rmse = float(np.sqrt(mse))
+        print("Test metrics:")
+        print(f"  mse: {mse:.6f}")
+        print(f"  rmse: {rmse:.6f}")
+        print(f"  mae: {mae:.6f}")
 
-    # ------------------------------------------------------------------
-    # Plot and save prediction results
-    # ------------------------------------------------------------------
-    print("=== Plotting results ===")
+        print("=== Plotting results ===")
+        last_price = getattr(loader, "last_price_before_test_", None)
+        if last_price is not None and last_price > 0:
+            true_prices = last_price * np.exp(np.cumsum(y_test_orig))
+            pred_prices = last_price * np.exp(np.cumsum(y_pred_orig))
+            plot_ylabel = "Option price (reconstructed)"
+            plot_title_ts = "Test set: true vs predicted (reconstructed prices)"
+            plot_title_sc = "True vs predicted (test set, reconstructed prices)"
+            y_plot_true = true_prices
+            y_plot_pred = pred_prices
+        else:
+            plot_ylabel = "Target (original scale)"
+            plot_title_ts = "Test set: true vs predicted"
+            plot_title_sc = "True vs predicted (test set)"
+            y_plot_true = y_test_orig
+            y_plot_pred = y_pred_orig
 
-    # If we used log returns, reconstruct price trajectories for plotting
-    last_price = getattr(loader, "last_price_before_test_", None)
-    if last_price is not None and last_price > 0:
-        true_prices = last_price * np.exp(np.cumsum(y_test_orig))
-        pred_prices = last_price * np.exp(np.cumsum(y_pred_orig))
-        plot_ylabel = "Option price (reconstructed)"
-        plot_title_ts = "Test set: true vs predicted (reconstructed prices)"
-        plot_title_sc = "True vs predicted (test set, reconstructed prices)"
-        y_plot_true = true_prices
-        y_plot_pred = pred_prices
+        results_dir = Path("results")
+        results_dir.mkdir(exist_ok=True)
+
+        fig_ts, ax_ts = plt.subplots(figsize=(8, 4))
+        ax_ts.plot(y_plot_true, label="True", linewidth=1.5)
+        ax_ts.plot(y_plot_pred, label="Predicted", linewidth=1.2, alpha=0.8)
+        ax_ts.set_xlabel("Test sample index")
+        ax_ts.set_ylabel(plot_ylabel)
+        ax_ts.set_title(plot_title_ts)
+        ax_ts.legend()
+        fig_ts.tight_layout()
+        fig_ts.savefig(results_dir / "test_timeseries.png", dpi=300)
+        plt.close(fig_ts)
+
+        fig_sc, ax_sc = plt.subplots(figsize=(4, 4))
+        ax_sc.scatter(y_plot_true, y_plot_pred, alpha=0.6, s=10)
+        min_val = float(min(y_plot_true.min(), y_plot_pred.min()))
+        max_val = float(max(y_plot_true.max(), y_plot_pred.max()))
+        ax_sc.plot([min_val, max_val], [min_val, max_val], "r--", linewidth=1)
+        ax_sc.set_xlabel("True price" if last_price else "True target")
+        ax_sc.set_ylabel("Predicted price" if last_price else "Predicted target")
+        ax_sc.set_title(plot_title_sc)
+        fig_sc.tight_layout()
+        fig_sc.savefig(results_dir / "test_scatter.png", dpi=300)
+        plt.close(fig_sc)
     else:
-        plot_ylabel = "Target (original scale)"
-        plot_title_ts = "Test set: true vs predicted"
-        plot_title_sc = "True vs predicted (test set)"
-        y_plot_true = y_test_orig
-        y_plot_pred = y_pred_orig
-
-    results_dir = Path("results")
-    results_dir.mkdir(exist_ok=True)
-
-    # Time-series plot: true vs predicted
-    fig_ts, ax_ts = plt.subplots(figsize=(8, 4))
-    ax_ts.plot(y_plot_true, label="True", linewidth=1.5)
-    ax_ts.plot(y_plot_pred, label="Predicted", linewidth=1.2, alpha=0.8)
-    ax_ts.set_xlabel("Test sample index")
-    ax_ts.set_ylabel(plot_ylabel)
-    ax_ts.set_title(plot_title_ts)
-    ax_ts.legend()
-    fig_ts.tight_layout()
-    fig_ts.savefig(results_dir / "test_timeseries.png", dpi=300)
-    plt.close(fig_ts)
-
-    # Scatter plot: true vs predicted
-    fig_sc, ax_sc = plt.subplots(figsize=(4, 4))
-    ax_sc.scatter(y_plot_true, y_plot_pred, alpha=0.6, s=10)
-    min_val = float(min(y_plot_true.min(), y_plot_pred.min()))
-    max_val = float(max(y_plot_true.max(), y_plot_pred.max()))
-    ax_sc.plot([min_val, max_val], [min_val, max_val], "r--", linewidth=1)
-    ax_sc.set_xlabel("True price" if last_price else "True target")
-    ax_sc.set_ylabel("Predicted price" if last_price else "Predicted target")
-    ax_sc.set_title(plot_title_sc)
-    fig_sc.tight_layout()
-    fig_sc.savefig(results_dir / "test_scatter.png", dpi=300)
-    plt.close(fig_sc)
+        print("Test set has no labels (template only). Predictions produced; save to file if needed.")
+        if X_test.shape[0] > 0:
+            results_dir = Path("results")
+            results_dir.mkdir(exist_ok=True)
+            np.savetxt(results_dir / "test_predictions.csv", y_pred_orig, delimiter=",")
+            print(f"Saved {len(y_pred_orig)} predictions to results/test_predictions.csv")
 
 
 if __name__ == "__main__":

@@ -69,8 +69,12 @@ class DataLoader:
         # Normalization parameters (computed from training data only)
         self.feature_mean_: Optional[float] = None
         self.feature_std_: Optional[float] = None
+        self.target_mean_: Optional[float] = None
+        self.target_std_: Optional[float] = None
         # PCA model (fitted on training set only, if used)
         self.pca_: Optional[PCA] = None
+        # When use_log_returns is True: last raw price before the first test step (for reconstructing price trajectories)
+        self.last_price_before_test_: Optional[float] = None
 
     # ------------------------------------------------------------------
     # Core loading utilities
@@ -186,19 +190,38 @@ class DataLoader:
         X_test = X[split_idx:]
         y_test = y[split_idx:]
 
+        # Expose last raw price before test set (for log-return → price reconstruction in main)
+        if self.config.use_log_returns:
+            # First test target is the return at frame row (lookback + split_idx); price before it is raw[lookback + split_idx]
+            lookback = self.config.lookback_window
+            idx_last = lookback + split_idx
+            if idx_last < len(raw):
+                self.last_price_before_test_ = float(raw.iloc[idx_last, 0])
+            else:
+                self.last_price_before_test_ = None
+        else:
+            self.last_price_before_test_ = None
+
         # Optional downsampling for quick experiments
         if self.config.max_samples is not None:
             max_n = self.config.max_samples
             X_train = X_train[:max_n]
             y_train = y_train[:max_n]
 
-        # Fit normalization on training features only (scalar z-score)
+        # Fit normalization on training features and target only (scalar z-score)
         if self.config.normalize_method == "zscore":
             self.feature_mean_ = float(X_train.mean())
             self.feature_std_ = float(X_train.std(ddof=0) + 1e-8)
 
             X_train = (X_train - self.feature_mean_) / self.feature_std_
             X_test = (X_test - self.feature_mean_) / self.feature_std_
+
+            # Target normalization
+            self.target_mean_ = float(y_train.mean())
+            self.target_std_ = float(y_train.std(ddof=0) + 1e-8)
+
+            y_train = (y_train - self.target_mean_) / self.target_std_
+            y_test = (y_test - self.target_mean_) / self.target_std_
         else:
             raise ValueError(
                 f"Unsupported normalize_method: {self.config.normalize_method}. "

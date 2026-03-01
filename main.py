@@ -127,7 +127,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model_type",
         type=str,
-        default="mlp",
+        default="ridge",
         choices=["mlp", "ridge", "lgbm"],
         help="Classical backend to use on top of quantum features.",
     )
@@ -195,27 +195,62 @@ def main() -> None:
     model.fit(X_train, y_train)
 
     print("=== Evaluating on test set ===")
-    metrics = model.evaluate(X_test, y_test)
+    # Predict in normalized space
+    y_pred_norm = model.predict(X_test)
+
+    # Inverse-transform targets and predictions back to original scale
+    target_mean = getattr(loader, "target_mean_", None)
+    target_std = getattr(loader, "target_std_", None)
+
+    if target_mean is not None and target_std is not None:
+        y_test_orig = y_test * target_std + target_mean
+        y_pred_orig = y_pred_norm * target_std + target_mean
+    else:
+        y_test_orig = y_test
+        y_pred_orig = y_pred_norm
+
+    # Compute metrics on original scale
+    mse = float(np.mean((y_pred_orig - y_test_orig) ** 2))
+    mae = float(np.mean(np.abs(y_pred_orig - y_test_orig)))
+    rmse = float(np.sqrt(mse))
+
     print("Test metrics:")
-    for k, v in metrics.items():
-        print(f"  {k}: {v:.6f}")
+    print(f"  mse: {mse:.6f}")
+    print(f"  rmse: {rmse:.6f}")
+    print(f"  mae: {mae:.6f}")
 
     # ------------------------------------------------------------------
     # Plot and save prediction results
     # ------------------------------------------------------------------
     print("=== Plotting results ===")
-    y_pred = model.predict(X_test)
+
+    # If we used log returns, reconstruct price trajectories for plotting
+    last_price = getattr(loader, "last_price_before_test_", None)
+    if last_price is not None and last_price > 0:
+        true_prices = last_price * np.exp(np.cumsum(y_test_orig))
+        pred_prices = last_price * np.exp(np.cumsum(y_pred_orig))
+        plot_ylabel = "Option price (reconstructed)"
+        plot_title_ts = "Test set: true vs predicted (reconstructed prices)"
+        plot_title_sc = "True vs predicted (test set, reconstructed prices)"
+        y_plot_true = true_prices
+        y_plot_pred = pred_prices
+    else:
+        plot_ylabel = "Target (original scale)"
+        plot_title_ts = "Test set: true vs predicted"
+        plot_title_sc = "True vs predicted (test set)"
+        y_plot_true = y_test_orig
+        y_plot_pred = y_pred_orig
 
     results_dir = Path("results")
     results_dir.mkdir(exist_ok=True)
 
     # Time-series plot: true vs predicted
     fig_ts, ax_ts = plt.subplots(figsize=(8, 4))
-    ax_ts.plot(y_test, label="True", linewidth=1.5)
-    ax_ts.plot(y_pred, label="Predicted", linewidth=1.2, alpha=0.8)
+    ax_ts.plot(y_plot_true, label="True", linewidth=1.5)
+    ax_ts.plot(y_plot_pred, label="Predicted", linewidth=1.2, alpha=0.8)
     ax_ts.set_xlabel("Test sample index")
-    ax_ts.set_ylabel("Option price (normalized units)")
-    ax_ts.set_title("Test set: true vs predicted prices")
+    ax_ts.set_ylabel(plot_ylabel)
+    ax_ts.set_title(plot_title_ts)
     ax_ts.legend()
     fig_ts.tight_layout()
     fig_ts.savefig(results_dir / "test_timeseries.png", dpi=300)
@@ -223,13 +258,13 @@ def main() -> None:
 
     # Scatter plot: true vs predicted
     fig_sc, ax_sc = plt.subplots(figsize=(4, 4))
-    ax_sc.scatter(y_test, y_pred, alpha=0.6, s=10)
-    min_val = float(min(y_test.min(), y_pred.min()))
-    max_val = float(max(y_test.max(), y_pred.max()))
+    ax_sc.scatter(y_plot_true, y_plot_pred, alpha=0.6, s=10)
+    min_val = float(min(y_plot_true.min(), y_plot_pred.min()))
+    max_val = float(max(y_plot_true.max(), y_plot_pred.max()))
     ax_sc.plot([min_val, max_val], [min_val, max_val], "r--", linewidth=1)
-    ax_sc.set_xlabel("True price")
-    ax_sc.set_ylabel("Predicted price")
-    ax_sc.set_title("True vs predicted (test set)")
+    ax_sc.set_xlabel("True price" if last_price else "True target")
+    ax_sc.set_ylabel("Predicted price" if last_price else "Predicted target")
+    ax_sc.set_title(plot_title_sc)
     fig_sc.tight_layout()
     fig_sc.savefig(results_dir / "test_scatter.png", dpi=300)
     plt.close(fig_sc)

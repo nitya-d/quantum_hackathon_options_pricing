@@ -1,90 +1,87 @@
-## Q-volution 2026 – Quandela Dataset Playground
+## Q-volution 2026 – Quandela Track (Option Pricing with QML)
 
-This folder contains local experiments around the Quandela / Aqora swaption dataset used for the Q-volution 2026 challenge.
-The data is stored as a single Parquet file and two main code paths are provided:
-- a small plotting script to visualize term-structure slices
-- a full MerLin-based Quantum Reservoir Computing (QRC) pipeline built on PyTorch
+This folder contains the Quantum Reservoir Computing (QRC) pipeline for the Q-volution 2026 Hackathon (Quandela: Option Pricing with QML).  
+Data is provided as **train** and **test** files (CSV or Excel). The pipeline uses a MerLin-based photonic reservoir and a classical readout (Ridge regression by default, or MLP / LightGBM).
 
 ### Folder structure
 
-- **`data/019c9f39-e697-7fa1-9725-d93bdd138124.parquet`**: Local copy of the Quandela swaption dataset downloaded from Aqora.
-- **`src/data_loader.py`**: Parquet-based loader that builds time-series windows `(X, y)` for a chosen swaption column.
-- **`src/quantum_reservoir.py`**: MerLin-based photonic quantum reservoir with angle/phase encoding (no amplitude encoding).
-- **`src/model.py`**: PyTorch `HybridQMLModel` combining the quantum reservoir with an MLP regressor.
-- **`main.py`**: CLI entry point that wires data loading, reservoir, and training loop.
-- **`plot_data.py`**: Utility script that reads the Parquet file and generates basic plots.
-- **`plots/`**: Output directory where generated figures are saved (created automatically).
-- **`.venv/`**: Local Python virtual environment (created automatically when running the setup below).
+- **`data/`**: Training and test data.
+  - **`train.xlsx`** (or `train.csv`): Historical swaption prices with a `Date` column and tenor/maturity columns.
+  - **`test_template.xlsx`** (or `test_template.csv`): Test inputs; may have no labels (template only).
+- **`src/data_loader.py`**: Loads train and test CSV/Excel files, builds time-series windows `(X, y)`, applies log returns, z-score normalization, and PCA to fit within photonic mode limits.
+- **`src/quantum_reservoir.py`**: MerLin-based photonic quantum reservoir with angle/phase encoding only (no amplitude encoding or state injection).
+- **`src/model.py`**: Hybrid QML model: quantum reservoir + classical readout (RidgeCV, MLP, or LightGBM).
+- **`main.py`**: CLI entry point: load data, train, evaluate (if test labels exist), and save plots or predictions.
+- **`plot_data.py`**: Optional utility to visualize swaption time series from a single dataset file.
+- **`results/`**: Output directory for test plots (`test_timeseries.png`, `test_scatter.png`) and optionally `test_predictions.csv`.
+- **`plots/`**: Output directory for `plot_data.py` figures (if used).
+- **`.venv/`**: Python virtual environment (create with the setup below).
 
 ### Python environment
 
-Create and initialize a local virtual environment in this folder:
+From the project root:
 
 ```bash
 cd q-volution2026_quandela
 python -m venv .venv
 .venv/bin/python -m pip install -U pip
-.venv/bin/python -m pip install pandas pyarrow matplotlib torch merlinquantum perceval-quandela
+.venv/bin/python -m pip install pandas pyarrow matplotlib openpyxl torch merlinquantum perceval-quandela scikit-learn
 ```
 
-If you already executed a similar command once, the environment and dependencies should already be available.
+Optional for LightGBM backend: `pip install lightgbm`.
 
 ### Dataset format
 
-The Parquet file contains:
+Train and test files (CSV or Excel) should contain:
 
-- A **`Date`** column (string in `DD/MM/YYYY` format, e.g. `01/01/2050`).
-- Many numeric columns of the form  
+- **`Date`**: Date column (parsed with `pd.to_datetime`; supports common formats).
+- **Target columns**: Numeric columns of the form  
   `Tenor : <T>; Maturity : <M>`  
-  where `<T>` is the tenor (e.g. `1`, `5`, `10`, `30`) and `<M>` is the maturity in years (e.g. `1`, `5`, `10`, `30`).
+  (e.g. `Tenor : 10; Maturity : 10`). The loader can use a single target column or multiple for multivariate input (then PCA reduces to `n_modes`).
 
-The script `plot_data.py`:
+The test file may be a submission template (e.g. only dates and no price values). In that case the pipeline still trains on the train file and can output predictions to `results/test_predictions.csv` if test feature rows exist.
 
-- Converts `Date` to a proper `datetime` object and sorts rows by date.
-- Selects a subset of tenor/maturity combinations for visualization.
+### Running the QRC pipeline
 
-### How to generate plots
-
-From inside `q-volution2026_quandela`:
+Train and evaluate (default: train from `data/train.xlsx`, test from `data/test_template.xlsx`):
 
 ```bash
 cd q-volution2026_quandela
-.venv/bin/python plot_data.py
+.venv/bin/python main.py
 ```
 
-This will:
-
-- Read `data/019c9f39-e697-7fa1-9725-d93bdd138124.parquet`.
-- Create the folder `plots/` if it does not exist.
-- Save two PNG figures:
-  - `plots/tenor10_time_series.png`: time series for `Tenor : 10` at selected maturities (`1`, `5`, `10`, `30` years).
-  - `plots/tenor10_maturity10_hist.png`: histogram of one selected tenor/maturity column (by default prioritizing `Tenor : 10; Maturity : 10` if present).
-
-You can edit `plot_data.py` to change:
-
-- Which tenor/maturity combinations are plotted in the time series (`target_columns`).
-- Which single column is used for the histogram (`candidate_columns`).
-
-### Quantum Reservoir Computing pipeline
-
-To train and evaluate the full QRC model on the swaption dataset:
+Example with custom paths and options:
 
 ```bash
-cd q-volution2026_quandela
-.venv/bin/python main.py --epochs 50 --batch_size 64
+.venv/bin/python main.py --train_path data/train.csv --test_path data/test.csv --lookback 8 --n_modes 8 --model_type ridge
 ```
 
-Key CLI options:
+**Main CLI options:**
 
-- `--target_column`: which `Tenor : T; Maturity : M` column to use as the price series.
-- `--lookback`: number of past time steps encoded by the reservoir.
-- `--n_modes`, `--n_photons`: photonic circuit size, subject to hard limits (≤ 20 modes, ≤ 10 photons).
-- `--no_log_returns`: disable log-return transformation and work directly with prices.
+| Option | Default | Description |
+|--------|---------|--------------|
+| `--train_path` | `data/train.xlsx` | Path to training data (CSV or Excel). |
+| `--test_path` | `data/test_template.xlsx` | Path to test data (CSV or Excel). |
+| `--date_column` | `Date` | Name of the date column. |
+| `--target_column` | `Tenor : 10; Maturity : 10` | Target price column(s). |
+| `--lookback` | `8` | Number of past time steps per window. |
+| `--n_modes` | `8` | Photonic modes (≤ 20); also used for PCA dimension. |
+| `--n_photons` | `4` | Photons (≤ 10). |
+| `--model_type` | `ridge` | Classical readout: `ridge`, `mlp`, or `lgbm`. |
+| `--no_log_returns` | — | Use raw prices instead of log returns. |
 
-Under the hood:
+**Behaviour:**
 
-- `src/data_loader.py` loads `data/019c9f39-...parquet`, selects the target column, and builds `lookback`-sized windows with z-score normalization (train-only statistics).
-- `src/quantum_reservoir.py` constructs a MerLin `QuantumLayer` using **angle/phase encoding only** (no amplitude encoding or state injection) and extracts per-mode expectation features.
-- `src/model.py` defines a PyTorch MLP that takes these quantum features as input and predicts future option prices.
+- **Train**: Loads the train file, builds windows, applies log returns (unless `--no_log_returns`), z-score normalization, and PCA. Fits the quantum reservoir features with the chosen classical model.
+- **Test**: If the test file has valid rows and the same columns, builds test windows and runs prediction. If test labels exist, prints metrics (MSE, RMSE, MAE) and saves time-series and scatter plots under `results/`. If the test file has no labels (template only), only predictions are produced and can be saved to `results/test_predictions.csv`.
+- **Empty test**: If the test file yields no samples (e.g. all NaN), the script exits after training and reports “No test samples”.
 
+### Pipeline internals
 
+- **DataLoader** (`src/data_loader.py`): Reads train and test CSV/Excel; selects `date_column` and `target_column`(s); builds supervised windows; fits z-score and PCA on train only; returns `X_train`, `X_test`, `y_train`, and `y_test` (or `y_test=None` when test has no labels).
+- **Quantum reservoir** (`src/quantum_reservoir.py`): MerLin `QuantumLayer` with angle encoding and fixed entangling layers; no amplitude encoding; mode expectations used as features.
+- **Hybrid model** (`src/model.py`): Reservoir features are passed to RidgeCV (default), a PyTorch MLP, or LightGBM for regression.
+
+### Optional: plot data only
+
+If you have a single dataset file (e.g. Parquet or CSV) and want to plot tenor time series and histograms, you can adapt and run `plot_data.py` (it currently expects a Parquet path; change `DATA_FILE` and the loader as needed).

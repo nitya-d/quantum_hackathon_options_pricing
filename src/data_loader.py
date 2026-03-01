@@ -17,8 +17,8 @@ import pandas as pd
 from sklearn.decomposition import PCA
 
 
-DEFAULT_TRAIN_PATH = Path("data") / "train.xlsx"
-DEFAULT_TEST_PATH = Path("data") / "test_template.xlsx"
+DEFAULT_TRAIN_PATH = Path("data") / "train.csv"
+DEFAULT_TEST_PATH = Path("data") / "test_template.csv"
 
 
 @dataclass

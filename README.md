@@ -5,12 +5,15 @@ Data is provided as **train** and **test** files (CSV or Excel). The pipeline us
 
 ### Folder structure
 
-- **`data/`**: Training and test data.
-  - **`train.xlsx`** (or `train.csv`): Historical swaption prices with a `Date` column and tenor/maturity columns.
-  - **`test_template.xlsx`** (or `test_template.csv`): Test inputs; may have no labels (template only).
+- **`data/`**: Training and test data (pandas-friendly CSV or original Excel).
+  - **`train.csv`** / `train.xlsx`: Training swaption prices (Date + Tenor/Maturity columns).
+  - **`test_template.csv`** / `test_template.xlsx`: Test template (Date, Type, Tenor/Maturity); may have no labels.
+  - **`sample_Simulated_Swaption_Price.csv`** / `.xlsx`: Sample swaption price data.
+  - All CSVs are normalized: **Date** first (ISO `YYYY-MM-DD`, sorted), then **Tenor** columns in lexicographic order, **Type** last if present. To regenerate CSVs from Excel: `python scripts/format_data.py`.
+- **`scripts/format_data.py`**: Converts Excel files in `data/` to normalized CSV.
 - **`src/data_loader.py`**: Loads train and test CSV/Excel files, builds time-series windows `(X, y)`, applies log returns, z-score normalization, and PCA to fit within photonic mode limits.
 - **`src/quantum_reservoir.py`**: MerLin-based photonic quantum reservoir with angle/phase encoding only (no amplitude encoding or state injection).
-- **`src/model.py`**: Hybrid QML model: quantum reservoir + classical readout (RidgeCV, MLP, or LightGBM).
+- **`src/model.py`**: Hybrid QML model: quantum reservoir + classical readout (Ridge, MLP, or LightGBM).
 - **`main.py`**: CLI entry point: load data, train, evaluate (if test labels exist), and save plots or predictions.
 - **`plot_data.py`**: Optional utility to visualize swaption time series from a single dataset file.
 - **`results/`**: Output directory for test plots (`test_timeseries.png`, `test_scatter.png`) and optionally `test_predictions.csv`.
@@ -34,16 +37,15 @@ Optional for LightGBM backend: `pip install lightgbm`.
 
 Train and test files (CSV or Excel) should contain:
 
-- **`Date`**: Date column (parsed with `pd.to_datetime`; supports common formats).
-- **Target columns**: Numeric columns of the form  
-  `Tenor : <T>; Maturity : <M>`  
-  (e.g. `Tenor : 10; Maturity : 10`). The loader can use a single target column or multiple for multivariate input (then PCA reduces to `n_modes`).
+- **`Date`**: First column in the normalized CSVs; ISO `YYYY-MM-DD`, sorted ascending. Parsed with `pd.to_datetime` in the loader.
+- **Tenor columns**: `Tenor : <T>; Maturity : <M>` (e.g. `Tenor : 10; Maturity : 10`), in lexicographic order in the CSVs. The loader can use a single target column or multiple for multivariate input (then PCA reduces to `n_modes`).
+- **Type** (optional): Last column in test/sample files (e.g. test_template, sample_Simulated_Swaption_Price).
 
-The test file may be a submission template (e.g. only dates and no price values). In that case the pipeline still trains on the train file and can output predictions to `results/test_predictions.csv` if test feature rows exist.
+The test file may be a submission template (only dates, no price values). Then the pipeline trains on the train file and can write predictions to `results/test_predictions.csv` if test feature rows exist. To get pandas-friendly CSVs from the Excel sources, run from the project root: `python scripts/format_data.py`.
 
 ### Running the QRC pipeline
 
-Train and evaluate (default: train from `data/train.xlsx`, test from `data/test_template.xlsx`):
+Train and evaluate (default: train from `data/train.csv`, test from `data/test_template.csv`):
 
 ```bash
 cd q-volution2026_quandela
@@ -60,14 +62,14 @@ Example with custom paths and options:
 
 | Option | Default | Description |
 |--------|---------|--------------|
-| `--train_path` | `data/train.xlsx` | Path to training data (CSV or Excel). |
-| `--test_path` | `data/test_template.xlsx` | Path to test data (CSV or Excel). |
+| `--train_path` | `data/train.csv` | Path to training data (CSV or Excel). |
+| `--test_path` | `data/test_template.csv` | Path to test data (CSV or Excel). |
 | `--date_column` | `Date` | Name of the date column. |
 | `--target_column` | `Tenor : 10; Maturity : 10` | Target price column(s). |
 | `--lookback` | `8` | Number of past time steps per window. |
 | `--n_modes` | `8` | Photonic modes (≤ 20); also used for PCA dimension. |
 | `--n_photons` | `4` | Photons (≤ 10). |
-| `--model_type` | `ridge` | Classical readout: `ridge`, `mlp`, or `lgbm`. |
+| `--model_type` | `lgbm` | Classical readout: `ridge`, `mlp`, or `lgbm`. |
 | `--no_log_returns` | — | Use raw prices instead of log returns. |
 
 **Behaviour:**
@@ -80,7 +82,7 @@ Example with custom paths and options:
 
 - **DataLoader** (`src/data_loader.py`): Reads train and test CSV/Excel; selects `date_column` and `target_column`(s); builds supervised windows; fits z-score and PCA on train only; returns `X_train`, `X_test`, `y_train`, and `y_test` (or `y_test=None` when test has no labels).
 - **Quantum reservoir** (`src/quantum_reservoir.py`): MerLin `QuantumLayer` with angle encoding and fixed entangling layers; no amplitude encoding; mode expectations used as features.
-- **Hybrid model** (`src/model.py`): Reservoir features are passed to RidgeCV (default), a PyTorch MLP, or LightGBM for regression.
+- **Hybrid model** (`src/model.py`): Reservoir features are passed to Ridge (fixed alpha), a PyTorch MLP, or LightGBM (default) for regression.
 
 ### Optional: plot data only
 

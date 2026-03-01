@@ -18,7 +18,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.linear_model import RidgeCV
+from sklearn.linear_model import Ridge
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch.utils.data import TensorDataset
 
@@ -39,7 +39,7 @@ class MLPConfig:
     Configuration for the classical head.
 
     Supports three backends:
-    - 'ridge' : scikit-learn RidgeCV (default, recommended)
+    - 'ridge' : scikit-learn Ridge(alpha=1.0)
     - 'mlp'   : PyTorch MLPRegressor
     - 'lgbm'  : LightGBM LGBMRegressor
     """
@@ -52,10 +52,8 @@ class MLPConfig:
     n_epochs: int = 50
     device: str = "cpu"
 
-    # 'ridge' (RidgeCV) is the robust default for RC
     classical_backend: str = "ridge"  # 'ridge', 'mlp', 'lgbm'
-    # Candidate alphas for RidgeCV; tuned via built-in CV
-    ridge_alphas: Tuple[float, ...] = (1e-3, 1e-2, 1e-1, 1.0, 10.0, 100.0)
+    ridge_alpha: float = 1.0  # regularization for Ridge (fixed, no CV)
     lgbm_num_leaves: int = 31
     lgbm_learning_rate: float = 0.05
     lgbm_n_estimators: int = 100
@@ -165,8 +163,8 @@ class HybridQMLModel:
                       f"Train MSE: {epoch_loss:.6f}")
 
         elif backend == "ridge":
-            # Standard RC readout: RidgeCV on reservoir features
-            self.model_sklearn = RidgeCV(alphas=self.mlp_config.ridge_alphas)
+            # Ridge with fixed alpha (avoids mean collapse from RidgeCV selecting huge alpha)
+            self.model_sklearn = Ridge(alpha=self.mlp_config.ridge_alpha)
             self.model_sklearn.fit(X_q, y_train.astype(np.float64))
 
         elif backend == "lgbm":

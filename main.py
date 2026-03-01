@@ -32,13 +32,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--train_path",
         type=str,
-        default=str(Path("data") / "train.xlsx"),
+        default=str(Path("data") / "train.csv"),
         help="Path to training data (CSV or Excel, e.g. train.csv or train.xlsx).",
     )
     parser.add_argument(
         "--test_path",
         type=str,
-        default=str(Path("data") / "test_template.xlsx"),
+        default=str(Path("data") / "test_template.csv"),
         help="Path to test data (CSV or Excel, e.g. test_template.csv or test_template.xlsx).",
     )
     parser.add_argument(
@@ -87,8 +87,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data_scaling_factor",
         type=float,
-        default=1.0,
-        help="Global scaling applied before angle encoding.",
+        default=0.785,
+        help="Global scaling applied before angle encoding (default π/4 for z-score inputs).",
     )
 
     # Classical head
@@ -133,7 +133,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model_type",
         type=str,
-        default="ridge",
+        default="lgbm",
         choices=["mlp", "ridge", "lgbm"],
         help="Classical backend to use on top of quantum features.",
     )
@@ -233,7 +233,12 @@ def main() -> None:
         last_price = getattr(loader, "last_price_before_test_", None)
         if last_price is not None and last_price > 0:
             true_prices = last_price * np.exp(np.cumsum(y_test_orig))
-            pred_prices = last_price * np.exp(np.cumsum(y_pred_orig))
+            # 1-step ahead: multiply previous actual price by predicted return (no cumsum)
+            prev_true_prices = np.zeros_like(y_test_orig, dtype=np.float64)
+            prev_true_prices[0] = last_price
+            if len(y_test_orig) > 1:
+                prev_true_prices[1:] = true_prices[:-1]
+            pred_prices = prev_true_prices * np.exp(y_pred_orig)
             plot_ylabel = "Option price (reconstructed)"
             plot_title_ts = "Test set: true vs predicted (reconstructed prices)"
             plot_title_sc = "True vs predicted (test set, reconstructed prices)"

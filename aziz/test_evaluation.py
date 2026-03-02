@@ -10,6 +10,8 @@ import torch
 import merlin as ML
 from merlin import LexGrouping, MeasurementStrategy, ComputationSpace
 from merlin.builder import CircuitBuilder
+
+
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
@@ -33,8 +35,9 @@ print(f"Config: {N_MODES} modes ({N_INPUT_MODES}+{N_MEMORY_MODES}), "
 # 1. LOAD DATA
 # ─────────────────────────────────────────────
 
-train_df = pd.read_excel("../../level1_level2_QML/level2_QML/train.xlsx", index_col=0)
-test_df  = pd.read_excel("test.xlsx", index_col=0)
+train_df = pd.read_excel("data/train.xlsx", index_col=0)
+test_df  = pd.read_excel("data/test.xlsx", index_col=0)
+
 
 feature_cols = train_df.columns.tolist()
 

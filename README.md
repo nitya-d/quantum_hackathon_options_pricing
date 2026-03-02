@@ -4,19 +4,36 @@
 
 **Level 1 — Swaption surface forecasting (primary metric: QLIKE, lower is better)**
 
+**Validation set (74 days, held-out from training):**
+
 | Model | RMSE | MAE | QLIKE | Notes |
 |---|---|---|---|---|
-| **Hybrid Temporal QRC (ours)** | **0.003467** | **0.002591** | **0.000636** | Single circuit + LexGrouping + Ridge α=0.1 |
+| 🥇 **Hybrid Temporal QRC (ours)** | **0.003467** | **0.002591** | **0.000636** | Single circuit + LexGrouping + Ridge α=0.1 |
 | MLP Baseline | 0.011867 | 0.008495 | 0.012288 | Fairest classical comparison |
 | Quantum CircuitBuilder | 0.014969 | 0.009463 | 0.012683 | Best single run, high variance |
 | Quantum CircuitBuilder with Barren Plateau fix | 0.014574 | 0.010024 | 0.015849 | Identity-block init, zero variance |
 | LSTM Baseline | 0.017637 | 0.013449 | 0.021510 | Insufficient data for recurrent model |
 
-**Level 2 — Missing data imputation**
+**Official test set (6 days: 24/12/2051 → 01/01/2052), retrained on all 494 days:**
 
-| Model | RMSE | MAE | Notes |
-|---|---|---|---|
-| Quantum Masked Autoencoder | 0.014704 | 0.010200 | 448-dim input (surface + binary mask) |
+Using our winning model Hybrid Temporal QRC
+| RMSE | MAE | QLIKE |
+|---|---|---|
+| **0.003283** | **0.002484** | **0.000624** |
+
+Per-day QLIKE breakdown:
+
+| Date | QLIKE |
+|---|---|
+| 24/12/2051 | 0.000068 |
+| 26/12/2051 | 0.001197 |
+| 27/12/2051 | 0.000078 |
+| 29/12/2051 | 0.000470 |
+| 30/12/2051 | 0.001499 |
+| 01/01/2052 | 0.000431 |
+
+Test QLIKE (0.000624) is marginally better than validation (0.000636), confirming no overfitting. See [`level1_level2_QML/level1_QML/test_evaluation.ipynb`](level1_level2_QML/level1_QML/test_evaluation.ipynb) for the full test inference pipeline.
+
 
 ---
 
@@ -59,7 +76,7 @@ Result: QLIKE **0.015849**, perfectly consistent across runs. Trade-off: slightl
 
 ### Step 5 — Literature pivot: Temporal QRC (Li et al. 2025)
 
-The barren plateau analysis revealed the deeper issue: gradient-trained quantum circuits on small financial datasets are fundamentally limited. We read Li et al. (arXiv:2505.13933) — *Quantum Reservoir Computing for Realized Volatility Forecasting* — and identified a better strategy:
+The barren plateau analysis revealed the deeper issue: gradient-trained quantum circuits on small financial datasets are fundamentally limited. **We read Li et al. (arXiv:2505.13933) — *Quantum Reservoir Computing for Realized Volatility Forecasting* — and identified a better strategy:**
 
 **Key insight from the paper:** Use a **fixed** (non-trained) quantum reservoir with:
 1. Distinct **input modes** (angle-encoded) and **memory modes** (never re-encoded, carry temporal state)

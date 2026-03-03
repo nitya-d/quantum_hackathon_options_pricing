@@ -12,15 +12,9 @@ https://oliviarosel.github.io/fanot_qubits_webpage/
 |---|---|---|---|---|
 | **Hybrid Temporal QRC (ours)** | **0.003467** | **0.002591** | **0.000636** | Single circuit + LexGrouping + Ridge α=0.1 |
 | MLP Baseline | 0.011867 | 0.008495 | 0.012288 | Fairest classical comparison |
-| Quantum CircuitBuilder | 0.014969 | 0.009463 | 0.012683 | Best single run, high variance |
-| Quantum CircuitBuilder with Barren Plateau fix | 0.014574 | 0.010024 | 0.015849 | Identity-block init, zero variance |
+| Variational Quantum CircuitBuilder | 0.014969 | 0.009463 | 0.012683 | Best single run, high variance |
+| Variational Quantum CircuitBuilder with Barren Plateau fix | 0.014574 | 0.010024 | 0.015849 | Identity-block init, zero variance |
 | LSTM Baseline | 0.017637 | 0.013449 | 0.021510 | Insufficient data for recurrent model |
-
-**Level 2 — Missing data imputation**
-
-| Model | RMSE | MAE | Notes |
-|---|---|---|---|
-| Quantum Masked Autoencoder | 0.014704 | 0.010200 | 448-dim input (surface + binary mask) |
 
 ---
 

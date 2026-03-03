@@ -12,13 +12,14 @@ The design follows the previous competition architecture:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Tuple
+from typing import Any, Iterable, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.linear_model import Ridge
+from sklearn.metrics import r2_score
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch.utils.data import TensorDataset
 
@@ -93,13 +94,31 @@ class HybridQMLModel:
     def __init__(
         self,
         quantum_reservoir: QuantumReservoir,
-        mlp_config: MLPConfig,
+        mlp_config: MLPConfig | None = None,
+        *,
+        # Legacy/Qiskit-style knob
+        regressor_type: str | None = None,
     ) -> None:
-        self.quantum_reservoir = quantum_reservoir
-        self.mlp_config = mlp_config
+        """
+        The old repository instantiates the model as:
+            HybridQMLModel(quantum_reservoir=..., regressor_type="ridge")
 
-        self.device = torch.device(mlp_config.device)
-        self.backend = mlp_config.classical_backend.lower()
+        The q-volution code also supports a richer config object (MLPConfig).
+        Both are supported to keep folder/code structure aligned.
+        """
+        self.quantum_reservoir = quantum_reservoir
+
+        if mlp_config is None:
+            backend = (regressor_type or "ridge").lower()
+            # Map old regressor names to current backends
+            if backend == "linear":
+                backend = "ridge"
+            self.mlp_config = MLPConfig(classical_backend=backend)
+        else:
+            self.mlp_config = mlp_config
+
+        self.device = torch.device(self.mlp_config.device)
+        self.backend = self.mlp_config.classical_backend.lower()
 
         # Models for different backends
         self.model_torch: MLPRegressor | None = None
@@ -117,7 +136,7 @@ class HybridQMLModel:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def fit(self, X_train: np.ndarray, y_train: np.ndarray) -> None:
+    def fit(self, X_train: np.ndarray, y_train: np.ndarray, *, verbose: bool = True) -> None:
         """
         Train the classical head on top of quantum reservoir features.
         """
@@ -158,9 +177,11 @@ class HybridQMLModel:
                     epoch_loss += loss.item() * batch_X.size(0)
 
                 epoch_loss /= len(dataset)
-                # Optional: simple progress print for debugging
-                print(f"[Epoch {epoch + 1}/{self.mlp_config.n_epochs}] "
-                      f"Train MSE: {epoch_loss:.6f}")
+                if verbose:
+                    print(
+                        f"[Epoch {epoch + 1}/{self.mlp_config.n_epochs}] "
+                        f"Train MSE: {epoch_loss:.6f}"
+                    )
 
         elif backend == "ridge":
             # Ridge with fixed alpha (avoids mean collapse from RidgeCV selecting huge alpha)
@@ -215,16 +236,39 @@ class HybridQMLModel:
                 "Supported: 'mlp', 'ridge', 'lgbm'."
             )
 
-    def evaluate(self, X: np.ndarray, y: np.ndarray) -> dict:
+    def evaluate(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        metrics: Iterable[str] = ("mse", "mae", "r2", "rmse"),
+    ) -> dict:
         """
         Evaluate model performance with basic regression metrics.
+
+        This matches the older repo which calls:
+            model.evaluate(X, y, metrics=[...])
         """
-        preds = self.predict(X)
-        y_true = y.astype(np.float32)
+        preds = self.predict(X).astype(np.float64)
+        y_true = y.astype(np.float64)
 
         mse = float(np.mean((preds - y_true) ** 2))
         mae = float(np.mean(np.abs(preds - y_true)))
         rmse = float(np.sqrt(mse))
+        r2 = float(r2_score(y_true, preds)) if len(y_true) > 1 else float("nan")
 
-        return {"mse": mse, "rmse": rmse, "mae": mae}
+        out: dict[str, float] = {}
+        for m in metrics:
+            m_l = m.lower()
+            if m_l == "mse":
+                out["mse"] = mse
+            elif m_l == "mae":
+                out["mae"] = mae
+            elif m_l == "rmse":
+                out["rmse"] = rmse
+            elif m_l == "r2":
+                out["r2"] = r2
+            else:
+                raise ValueError(f"Unsupported metric: {m}")
+        return out
 

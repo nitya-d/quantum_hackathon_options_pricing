@@ -7,16 +7,24 @@ Data is provided as **train** and **test** files (CSV or Excel). The pipeline us
 
 - **`data/`**: Training and test data (pandas-friendly CSV or original Excel).
   - **`train.csv`** / `train.xlsx`: Training swaption prices (Date + Tenor/Maturity columns).
+  - **`test.csv`** / `test.xlsx`: Small labeled test set (if available).
   - **`test_template.csv`** / `test_template.xlsx`: Test template (Date, Type, Tenor/Maturity); may have no labels.
   - **`sample_Simulated_Swaption_Price.csv`** / `.xlsx`: Sample swaption price data.
   - All CSVs are normalized: **Date** first (ISO `YYYY-MM-DD`, sorted), then **Tenor** columns in lexicographic order, **Type** last if present. To regenerate CSVs from Excel: `python scripts/format_data.py`.
 - **`scripts/format_data.py`**: Converts Excel files in `data/` to normalized CSV.
-- **`src/data_loader.py`**: Loads train and test CSV/Excel files, builds time-series windows `(X, y)`, applies log returns, z-score normalization, and PCA to fit within photonic mode limits.
+- **`src/data_loader.py`**: Data loader with two APIs:
+  - Q-volution API (explicit train/test files)
+  - Qiskit-Fall-Fest-compatible API: `get_available_pairs`, `prepare_data`, `denormalize`
 - **`src/quantum_reservoir.py`**: MerLin-based photonic quantum reservoir with angle/phase encoding only (no amplitude encoding or state injection).
 - **`src/model.py`**: Hybrid QML model: quantum reservoir + classical readout (Ridge, MLP, or LightGBM).
-- **`main.py`**: CLI entry point: load data, train, evaluate (if test labels exist), and save plots or predictions.
+- **`main.py`**: Qiskit-Fall-Fest-shaped entry point with `run_experiment(config)` that writes qiskit-like outputs into `results/`.
+- **`tune.py`**: Hyperparameter tuning (grid/sampling) that writes `results/tuning_results.json`, `results/best_params.json`, `results/tuning_heatmap.png`.
+- **`run_best_params.py`**: Runs `run_experiment` using `results/best_params.json`.
+- **`requirements.txt`**: Dependencies (similar role as the old repo).
 - **`plot_data.py`**: Optional utility to visualize swaption time series from a single dataset file.
-- **`results/`**: Output directory for test plots (`test_timeseries.png`, `test_scatter.png`) and optionally `test_predictions.csv`.
+- **`results/`**: Output directory mirroring the old repo:
+  - `prediction_plot.png`, `train_predictions.png`, `test_predictions.png`, `residuals.png`, `results_summary.txt`
+  - optional: `tuning_heatmap.png`, `tuning_results.json`, `best_params.json`
 - **`plots/`**: Output directory for `plot_data.py` figures (if used).
 - **`.venv/`**: Python virtual environment (create with the setup below).
 
@@ -28,10 +36,11 @@ From the project root:
 cd q-volution2026_quandela
 python -m venv .venv
 .venv/bin/python -m pip install -U pip
-.venv/bin/python -m pip install pandas pyarrow matplotlib openpyxl torch merlinquantum perceval-quandela scikit-learn
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
-Optional for LightGBM backend: `pip install lightgbm`.
+If you prefer not to use `requirements.txt`, install manually:
+`pandas matplotlib openpyxl scikit-learn torch merlinquantum perceval-quandela lightgbm`.
 
 ### Dataset format
 
@@ -45,44 +54,46 @@ The test file may be a submission template (only dates, no price values). Then t
 
 ### Running the QRC pipeline
 
-Train and evaluate (default: train from `data/train.csv`, test from `data/test_template.csv`):
+Train and evaluate (Qiskit-Fall-Fest-shaped; single-file interface):
 
 ```bash
 cd q-volution2026_quandela
 .venv/bin/python main.py
 ```
 
-Example with custom paths and options:
+Example with a specific file and classical backend:
 
 ```bash
-.venv/bin/python main.py --train_path data/train.csv --test_path data/test.csv --lookback 8 --n_modes 8 --model_type ridge
+.venv/bin/python main.py --data_file data/train.csv --regressor lgbm --lookback 8 --n_qubits 8
 ```
 
-**Main CLI options:**
+**Key CLI options (kept similar to the old repo):**
 
 | Option | Default | Description |
 |--------|---------|--------------|
-| `--train_path` | `data/train.csv` | Path to training data (CSV or Excel). |
-| `--test_path` | `data/test_template.csv` | Path to test data (CSV or Excel). |
-| `--date_column` | `Date` | Name of the date column. |
-| `--target_column` | `Tenor : 10; Maturity : 10` | Target price column(s). |
+| `--data_file` | `data/train.csv` | Single dataset file used for chrono train/test split. |
+| `--price_column` | `None` | Target column; if omitted uses `Tenor : 10; Maturity : 10` by default. |
+| `--tenor`, `--maturity` | `None` | Alternative way to select target column (`Tenor : T; Maturity : M`). |
 | `--lookback` | `8` | Number of past time steps per window. |
-| `--n_modes` | `8` | Photonic modes (≤ 20); also used for PCA dimension. |
-| `--n_photons` | `4` | Photons (≤ 10). |
-| `--model_type` | `lgbm` | Classical readout: `ridge`, `mlp`, or `lgbm`. |
-| `--no_log_returns` | — | Use raw prices instead of log returns. |
+| `--test_size` | `0.2` | Fraction held out for test (chronological). |
+| `--n_qubits` | `8` | Legacy name; mapped to photonic `n_modes` (≤ 20). |
+| `--depth` | `3` | Reservoir depth (entangling layers). |
+| `--regressor` | `lgbm` | Classical readout: `ridge`, `mlp`, or `lgbm`. |
+| `--no_log_returns` | — | Use raw prices instead of log returns (default uses log returns). |
+| `--output_dir` | `results/` | Where result files are saved. |
+| `--max_samples` | `None` | Cap number of samples (useful for tuning/debug). |
 
 **Behaviour:**
 
-- **Train**: Loads the train file, builds windows, applies log returns (unless `--no_log_returns`), z-score normalization, and PCA. Fits the quantum reservoir features with the chosen classical model.
-- **Test**: If the test file has valid rows and the same columns, builds test windows and runs prediction. If test labels exist, prints metrics (MSE, RMSE, MAE) and saves time-series and scatter plots under `results/`. If the test file has no labels (template only), only predictions are produced and can be saved to `results/test_predictions.csv`.
-- **Empty test**: If the test file yields no samples (e.g. all NaN), the script exits after training and reports “No test samples”.
+- **Split**: Uses a single file and performs a **chronological train/test split** (same as the old repo).
+- **Train**: Builds windows, applies log returns (unless `--no_log_returns`), and z-score normalization (train only). The MerLin reservoir extracts quantum features, then the classical regressor is trained.
+- **Outputs**: Writes qiskit-like artifacts to `results/`: `prediction_plot.png`, `train_predictions.png`, `test_predictions.png`, `residuals.png`, `results_summary.txt`.
 
 ### Pipeline internals
 
-- **DataLoader** (`src/data_loader.py`): Reads train and test CSV/Excel; selects `date_column` and `target_column`(s); builds supervised windows; fits z-score and PCA on train only; returns `X_train`, `X_test`, `y_train`, and `y_test` (or `y_test=None` when test has no labels).
-- **Quantum reservoir** (`src/quantum_reservoir.py`): MerLin `QuantumLayer` with angle encoding and fixed entangling layers; no amplitude encoding; mode expectations used as features.
-- **Hybrid model** (`src/model.py`): Reservoir features are passed to Ridge (fixed alpha), a PyTorch MLP, or LightGBM (default) for regression.
+- **DataLoader** (`src/data_loader.py`): The compatibility API used by `main.py` is `prepare_data()` + `denormalize()`.
+- **Quantum reservoir** (`src/quantum_reservoir.py`): MerLin `QuantumLayer` with **angle encoding only** (no amplitude encoding); mode expectations used as features.
+- **Hybrid model** (`src/model.py`): Reservoir features → classical regressor (`ridge` / `mlp` / `lgbm`).
 
 ### Optional: plot data only
 

@@ -1,0 +1,2 @@
+Circuit visualization not available for this MerLin version.
+n_modes=8, n_photons=4, depth=3

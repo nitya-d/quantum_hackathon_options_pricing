@@ -15,6 +15,7 @@ Design goals
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, Union
 
 import numpy as np
@@ -65,22 +66,99 @@ class QuantumReservoir:
 
     def __init__(
         self,
-        config: ReservoirConfig,
+        config: Optional[ReservoirConfig] = None,
+        *,
+        # Legacy/Qiskit-style parameter names (for structural compatibility)
+        n_qubits: Optional[int] = None,
+        depth: Optional[int] = None,
+        encoding_type: str = "angle",
+        entanglement_pattern: str = "linear",
+        random_seed: int = 42,
+        shots: int = 1024,
+        data_scaling_factor: Optional[float] = None,
+        # Native q-volution / MerLin params
+        n_photons: Optional[int] = None,
+        device: Optional[Union[str, torch.device]] = None,
     ) -> None:
-        self.config = config
+        # We keep these legacy fields for API parity; MerLin reservoir currently
+        # uses angle/phase encoding only and deterministic expectation features.
+        self.encoding_type = encoding_type
+        self.entanglement_pattern = entanglement_pattern
+        self.random_seed = int(random_seed)
+        self.shots = int(shots)
+
+        if config is None:
+            cfg = ReservoirConfig(
+                n_modes=int(n_qubits) if n_qubits is not None else 8,
+                n_photons=int(n_photons) if n_photons is not None else 4,
+                depth=int(depth) if depth is not None else 3,
+                data_scaling_factor=float(data_scaling_factor) if data_scaling_factor is not None else 1.0,
+                device=device,
+            )
+            self.config = cfg
+        else:
+            self.config = config
+            # Allow overriding scaling factor from legacy arg
+            if data_scaling_factor is not None:
+                self.config.data_scaling_factor = float(data_scaling_factor)
 
         # Resolve device
         self.device = (
-            torch.device(config.device)
-            if isinstance(config.device, (str, torch.device))
+            torch.device(self.config.device)
+            if isinstance(self.config.device, (str, torch.device))
             else torch.device("cpu")
         )
 
         # Will be set once we see the first batch of data (if not provided)
-        self.input_size: Optional[int] = config.input_size
+        self.input_size: Optional[int] = self.config.input_size
 
         # Underlying MerLin layer (lazily constructed once input_size is known)
         self._quantum_layer: Optional[ML.QuantumLayer] = None
+
+    # ------------------------------------------------------------------
+    # Qiskit Fall Fest compatibility helpers
+    # ------------------------------------------------------------------
+    def get_circuit_depth(self) -> int:
+        """Return effective circuit depth (legacy helper)."""
+        return int(self.config.depth)
+
+    def visualize_circuit(self, save_path: str) -> None:
+        """
+        Best-effort circuit visualization.
+
+        MerLin/Perceval visualization APIs differ from Qiskit. For structural
+        compatibility we attempt to build the layer and export an image if
+        supported. If not supported, we write a small placeholder text file
+        next to the requested path.
+        """
+        path = Path(save_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Ensure layer is built (with minimal input size)
+        if self._quantum_layer is None:
+            self._build_quantum_layer(input_size=min(1, self.config.n_modes))
+
+        # Try MerLin builder draw if available; otherwise fallback.
+        try:
+            builder = self._build_circuit_builder(input_size=self.input_size or 1)
+            # Some MerLin versions expose builder.circuit or builder.draw; this may vary.
+            draw = getattr(builder, "draw", None)
+            if callable(draw):
+                fig = draw()  # type: ignore[call-arg]
+                # If draw returns a matplotlib figure, save it
+                savefig = getattr(fig, "savefig", None)
+                if callable(savefig):
+                    savefig(str(path), dpi=300, bbox_inches="tight")
+                    return
+        except Exception:
+            pass
+
+        # Fallback: write a small placeholder
+        placeholder = path.with_suffix(".txt")
+        placeholder.write_text(
+            "Circuit visualization not available for this MerLin version.\n"
+            f"n_modes={self.config.n_modes}, n_photons={self.config.n_photons}, depth={self.config.depth}\n"
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers

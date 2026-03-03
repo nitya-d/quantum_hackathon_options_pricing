@@ -1,16 +1,30 @@
 """
 Data loading and preprocessing for the Q-volution 2026 Quandela track.
 
-This module loads train and test CSV files (separate files), selects
-date and target columns, builds supervised time-series windows, and
-applies optional log-return transformation and z-score normalization.
+This module serves two purposes:
+
+1) **q-volution pipeline** (current):
+   - Load explicit train/test files (CSV or Excel)
+   - Build supervised time-series windows
+   - Apply log-returns, z-score normalization, and optional PCA to fit within
+     photonic mode limits.
+
+2) **Qiskit Fall Fest compatibility layer** (legacy API):
+   The older competition code expects a `DataLoader` with methods like:
+   - `get_available_pairs(data_file)`
+   - `prepare_data(data_file, tenor=..., maturity=..., use_log_returns=...)`
+   - `denormalize(y)`
+
+   We provide these methods so `main.py`, `tune.py`, and `run_best_params.py`
+   can mirror the old repository's structure, even though the underlying
+   framework and datasets differ.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union, List
 
 import numpy as np
 import pandas as pd
@@ -58,8 +72,27 @@ class DataLoader:
     - y_test: array of shape [n_test] or None if test file has no labels
     """
 
-    def __init__(self, config: DataConfig) -> None:
-        self.config = config
+    def __init__(
+        self,
+        config: Optional[DataConfig] = None,
+        *,
+        # Legacy-style arguments (used by the Qiskit Fall Fest-shaped main/tune scripts)
+        normalize_method: str = "zscore",
+        lookback_window: int = 8,
+        test_size: float = 0.2,
+        random_seed: int = 42,
+    ) -> None:
+        # New-style config (preferred in q-volution pipeline)
+        self.config = config or DataConfig(
+            lookback_window=lookback_window,
+            normalize_method=normalize_method,
+        )
+
+        # Legacy settings (kept for compatibility)
+        self.normalize_method = normalize_method
+        self.lookback_window = lookback_window
+        self.test_size = test_size
+        self.random_seed = random_seed
 
         self.feature_mean_: Optional[float] = None
         self.feature_std_: Optional[float] = None
@@ -73,7 +106,7 @@ class DataLoader:
     # Core loading utilities
     # ------------------------------------------------------------------
     def _load_csv(
-        self, path: Path, required_targets: bool = True
+        self, path: Path, required_targets: bool = True, *, target_columns: Optional[Sequence[str]] = None
     ) -> pd.DataFrame:
         """
         Load a CSV or Excel file and return a DataFrame with date_column and target columns only.
@@ -89,16 +122,20 @@ class DataLoader:
             # Excel: read first sheet
             df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
 
-        if self.config.date_column not in df.columns:
+        date_column = self.config.date_column
+        if date_column not in df.columns:
             raise ValueError(
-                f"Expected date column '{self.config.date_column}' in {path.name}. "
+                f"Expected date column '{date_column}' in {path.name}. "
                 f"Available columns: {list(df.columns)}"
             )
 
-        if isinstance(self.config.target_column, str):
-            target_cols = [self.config.target_column]
+        if target_columns is not None:
+            target_cols = list(target_columns)
         else:
-            target_cols = list(self.config.target_column)
+            if isinstance(self.config.target_column, str):
+                target_cols = [self.config.target_column]
+            else:
+                target_cols = list(self.config.target_column)
 
         missing = [c for c in target_cols if c not in df.columns]
         if missing:
@@ -107,18 +144,161 @@ class DataLoader:
                 f"Please choose among: {list(df.columns)}"
             )
 
-        keep = [self.config.date_column] + target_cols
+        keep = [date_column] + target_cols
         df = df[keep].copy()
-        df[self.config.date_column] = pd.to_datetime(
-            df[self.config.date_column], dayfirst=True, errors="coerce"
+        df[date_column] = pd.to_datetime(
+            df[date_column], dayfirst=True, errors="coerce"
         )
-        df = df.sort_values(self.config.date_column)
+        df = df.sort_values(date_column)
 
         if required_targets:
             df = df.dropna(subset=target_cols)
         # else: keep rows even if target is NaN (for test with missing labels)
 
         return df
+
+    # ------------------------------------------------------------------
+    # Qiskit Fall Fest compatibility API
+    # ------------------------------------------------------------------
+    def get_available_pairs(self, data_file: Union[str, Path]) -> List[Tuple[float, float]]:
+        """
+        Parse available (Tenor, Maturity) pairs from column names like:
+        'Tenor : 10; Maturity : 10'
+        """
+        path = Path(data_file)
+        if not path.exists():
+            raise FileNotFoundError(f"Data file not found: {path}")
+
+        if str(path).lower().endswith(".csv"):
+            df = pd.read_csv(path, nrows=1)
+        else:
+            df = pd.read_excel(path, sheet_name=0, engine="openpyxl", nrows=1)
+
+        pairs: List[Tuple[float, float]] = []
+        for col in df.columns:
+            if not isinstance(col, str):
+                continue
+            if col.startswith("Tenor :") and "; Maturity :" in col:
+                try:
+                    left, right = col.split(";")
+                    tenor = float(left.split(":")[1].strip())
+                    maturity = float(right.split(":")[1].strip())
+                    pairs.append((tenor, maturity))
+                except Exception:
+                    continue
+        return pairs
+
+    def denormalize(self, y: np.ndarray) -> np.ndarray:
+        """Inverse z-score normalization for targets (legacy helper)."""
+        if self.target_mean_ is None or self.target_std_ is None:
+            return y
+        return y * float(self.target_std_) + float(self.target_mean_)
+
+    def prepare_data(
+        self,
+        data_file: Union[str, Path],
+        *,
+        price_column: Optional[str] = None,
+        tenor: Optional[float] = None,
+        maturity: Optional[float] = None,
+        use_log_returns: bool = True,
+        max_samples: Optional[int] = None,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
+        """
+        Legacy-style single-file loader that matches the old code's call pattern.
+
+        - Loads one file (CSV/Excel)
+        - Selects a single target column (by price_column OR tenor+maturity)
+        - Builds windows with self.lookback_window
+        - Chronologically splits by self.test_size
+        - Fits normalization on train only and exposes denormalize()
+
+        Returns: (X_train, X_test, y_train, y_test, test_initial_prices)
+        """
+        rng = np.random.RandomState(self.random_seed)
+        _ = rng  # keep for parity; split is chronological
+
+        path = Path(data_file)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parent.parent / path
+        if not path.exists():
+            raise FileNotFoundError(f"Data file not found: {path}")
+
+        # Decide target column
+        target_col: Optional[str] = None
+        if price_column:
+            target_col = price_column
+        elif tenor is not None and maturity is not None:
+            target_col = f"Tenor : {tenor}; Maturity : {maturity}"
+        else:
+            # Default: keep current DataConfig default
+            target_col = self.config.target_column if isinstance(self.config.target_column, str) else list(self.config.target_column)[0]
+
+        df = self._load_csv(path, required_targets=True, target_columns=[str(target_col)])
+        series = df[str(target_col)].astype(float)
+
+        # Keep raw price series for reconstruction
+        raw_prices = series.to_numpy(dtype=np.float64)
+
+        if use_log_returns:
+            frame = self._to_log_returns(series)
+        else:
+            frame = series.to_frame()
+
+        # Override lookback from legacy parameter
+        old_lb = self.config.lookback_window
+        self.config.lookback_window = int(self.lookback_window)
+        try:
+            X, y = self._build_windows(frame, allow_nan_target=False)
+        finally:
+            self.config.lookback_window = old_lb
+
+        # Optional truncation for fast tuning
+        if max_samples is not None:
+            X = X[:max_samples]
+            y = y[:max_samples]
+
+        # Chronological split
+        n = X.shape[0]
+        split_idx = int((1.0 - float(self.test_size)) * n)
+        split_idx = max(1, min(split_idx, n - 1)) if n > 1 else 1
+        X_train, X_test = X[:split_idx], X[split_idx:]
+        y_train, y_test = y[:split_idx], y[split_idx:]
+
+        # Compute initial price before first test prediction (for log-return → price reconstruction)
+        test_initial_prices: Optional[np.ndarray]
+        if use_log_returns and len(raw_prices) > 0 and len(X_test) > 0:
+            # First test sample corresponds to log-return at index (lookback + split_idx) in the returns frame.
+            # Price before that return is raw_prices[lookback + split_idx]
+            idx = int(self.lookback_window + split_idx)
+            if 0 <= idx < len(raw_prices):
+                test_initial_prices = np.asarray([raw_prices[idx]], dtype=np.float64)
+            else:
+                test_initial_prices = None
+        else:
+            test_initial_prices = None
+
+        # Normalize (train only)
+        if self.normalize_method == "zscore":
+            self.feature_mean_ = float(X_train.mean())
+            self.feature_std_ = float(X_train.std(ddof=0) + 1e-8)
+            X_train = (X_train - self.feature_mean_) / self.feature_std_
+            X_test = (X_test - self.feature_mean_) / self.feature_std_
+
+            self.target_mean_ = float(y_train.mean())
+            self.target_std_ = float(y_train.std(ddof=0) + 1e-8)
+            y_train = (y_train - self.target_mean_) / self.target_std_
+            y_test = (y_test - self.target_mean_) / self.target_std_
+        else:
+            raise ValueError(f"Unsupported normalize_method: {self.normalize_method}")
+
+        return (
+            X_train.astype(np.float32),
+            X_test.astype(np.float32),
+            y_train.astype(np.float32),
+            y_test.astype(np.float32),
+            test_initial_prices,
+        )
 
     def _to_log_returns(self, values: Union[pd.Series, pd.DataFrame]) -> pd.DataFrame:
         """Convert price series or frame to log returns."""

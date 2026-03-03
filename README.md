@@ -104,19 +104,15 @@ The command above produces Qiskit-Fall-Fest-style artifacts under `results/`.
 - **Config**: `n_qubits=8`, `depth=3`, `encoding=angle`, `lookback=8`, `regressor=lgbm`
 - **Test**: R2 = **-0.056195**, MSE = **0.092340**, RMSE = **0.303874**, MAE = **0.221406**, MAPE = **0.9639%**
 
-#### Prediction plot
+#### Prediction plot (test prices)
 
 ![prediction_plot](results/prediction_plot.png)
 
-#### Train predictions
+#### Train predictions (log-returns)
 
 ![train_predictions](results/train_predictions.png)
 
-#### Test predictions
-
-![test_predictions](results/test_predictions.png)
-
-#### Residuals
+#### Residuals (test prices)
 
 ![residuals](results/residuals.png)
 

@@ -315,16 +315,11 @@ def run_experiment(config: dict) -> dict:
     # Step 5: Visualization + results_summary.txt
     if config.get("visualize", False):
         if y_test_pred_prices is not None and y_test_actual_prices is not None:
+            # Single canonical plot for test prices (kept as prediction_plot.png)
             plot_predictions(
                 y_test_actual_prices,
                 y_test_pred_prices,
                 title="Test Set: Predicted vs Actual Prices (Reconstructed)",
-                save_path=output_dir / "test_predictions.png",
-            )
-            plot_predictions(
-                y_test_actual_prices,
-                y_test_pred_prices,
-                title="Predicted vs Actual Prices",
                 save_path=output_dir / "prediction_plot.png",
             )
             plot_residuals(

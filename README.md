@@ -164,3 +164,114 @@ See [HACKATHON_RESOURCES.md](HACKATHON_RESOURCES.md) for the full hackathon over
 ## Track B Study Materials
 
 See [preparation_materials/Track_B_Quandela.md](preparation_materials/Track_B_Quandela.md) for the full reading list, SDK docs, and technical constraints.
+
+---
+
+## Repository Structure
+
+```
+quantum_hackathon_options_pricing/
+├── src/                        # All Python source files
+│   ├── hybrid_temporal_QRC.py  # Main winning model (Temporal QRC, QLIKE 0.000636)
+│   ├── variational_model.py    # Gradient-trained variational quantum circuit
+│   ├── classical_baseline.py   # MLP and LSTM classical baselines
+│   ├── test_evaluation.py      # Runs the hybrid QRC model on the test dataset
+│   └── visualizations.py       # Generates all result figures
+│
+├── data/                       # Input data (Excel / CSV)
+│   ├── train.xlsx              # Training swaption surface data
+│   ├── test.xlsx               # Test swaption surface data
+│   └── test.csv                # Test data in CSV format
+│
+├── models/                     # Saved model artefacts
+│   ├── classical_preprocessing.pkl            # Fitted scaler + PCA objects
+│   ├── mlp_best.pt                            # Best MLP checkpoint
+│   ├── lstm_best.pt                           # Best LSTM checkpoint
+│   ├── variational_quantum_circuit_adam_optimize_and_qlike_loss.pt  # Variational QC checkpoint
+│
+├── results/                    # Output predictions and figures
+│   ├── test_predictions.csv    # Final hackathon submission predictions
+│   └── *.png                   # Generated visualisation images
+│
+├── Fanot_Qubits_Website/       # Static team website source
+│   ├── index.html
+│   ├── script.js
+│   ├── styles.css
+│   └── images/
+│
+├── requirements.txt            # All Python dependencies
+└── README.md                   # This file
+```
+
+---
+
+## Running the Python Scripts
+
+All scripts live in `src/` and must be run from the **repository root** so that the relative paths (`data/`, `models/`, `results/`) resolve correctly. Make sure the virtual environment is activated first.
+
+```bash
+# from the repository root
+cd quantum_hackathon_options_pricing
+source .venv/bin/activate          # macOS/Linux
+# or: .venv\Scripts\activate       # Windows cmd
+```
+
+### 1. Hybrid Temporal QRC (winning model)
+
+Trains the fixed quantum reservoir + Ridge regression pipeline and prints validation metrics.
+
+```bash
+python src/hybrid_temporal_QRC.py
+```
+
+**Output:** RMSE / MAE / QLIKE printed to stdout; the fitted Ridge model is held in memory for evaluation.
+
+---
+
+### 2. Variational Quantum Circuit model
+
+Trains the gradient-based variational quantum circuit with QLIKE loss and Adam optimiser.
+
+```bash
+python src/variational_model.py
+```
+
+**Output:** Per-epoch loss printed to stdout; best checkpoint saved to `models/vartional_quantum_circuit_adam_optimize_and_qlike_loss.pt`.
+
+---
+
+### 3. Classical baselines (MLP + LSTM)
+
+Trains both classical baselines under identical conditions and prints QLIKE for each.
+
+```bash
+python src/classical_baseline.py
+```
+
+**Output:** Best checkpoints saved to `models/mlp_best.pt` and `models/lstm_best.pt`; preprocessing objects saved to `models/classical_preprocessing.pkl`.
+
+---
+
+### 4. Test-set evaluation
+
+Loads the trained QRC model and runs inference on the held-out test set.
+
+```bash
+python src/test_evaluation.py
+```
+
+**Output:** Per-day metrics printed to stdout; final predictions written to `results/test_predictions.csv`.
+
+---
+
+### 5. Visualisations
+
+Generates all result figures and saves them to `results/`. Pass `--no-show` to skip the interactive display (useful on headless servers).
+
+```bash
+python src/visualizations.py
+# or, to save without opening a window:
+python src/visualizations.py --no-show
+```
+
+**Output:** Six PNG files saved to `results/` — surface heatmaps, MAE heatmap, per-maturity QLIKE, model comparison, scatter plot, and time-series comparison.

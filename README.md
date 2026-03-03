@@ -57,26 +57,6 @@ quantum_hackathon_options_pricing/
 
 ---
 
-## Running the Python Scripts
-
-All scripts live in `src/` and must be run from the **repository root**. Activate the virtual environment first:
-
-```bash
-cd quantum_hackathon_options_pricing
-source .venv/bin/activate          # macOS/Linux
-# or: .venv\Scripts\activate       # Windows
-```
-
-| # | Script | Purpose | Key outputs |
-|---|--------|---------|-------------|
-| 1 | `python src/hybrid_temporal_QRC.py` | Train the winning Temporal QRC model | Metrics to stdout |
-| 2 | `python src/variational_model.py` | Train the variational quantum circuit | `models/vartional_quantum_circuit_adam_optimize_and_qlike_loss.pt` |
-| 3 | `python src/classical_baseline.py` | Train MLP + LSTM baselines | `models/mlp_best.pt`, `models/lstm_best.pt`, `models/classical_preprocessing.pkl` |
-| 4 | `python src/test_evaluation.py` | Evaluate all models on the test set | `results/test_predictions.csv`, `results/test_metrics_summary.csv` |
-| 5 | `python src/visualizations.py` | Generate all result figures (`--no-show` for headless) | Six PNGs in `results/` |
-
----
-
 ## Setup
 
 Requires **Python 3.11+**, **Git**, and **VS Code** (with Python + Jupyter extensions). Uses venv, not conda.
@@ -98,6 +78,26 @@ python -m ipykernel install --user --name quantum --display-name "Python (quantu
 Then in VS Code: open a notebook → kernel picker (top-right) → **Python Environments** → **quantum**.
 
 > **Troubleshooting:** PyTorch DLL error on Windows → install [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) and restart. NumPy import error → `pip install "numpy<2"` (already pinned in requirements.txt).
+
+---
+
+## Running the Python Scripts
+
+All scripts live in `src/` and must be run from the **repository root**. Activate the virtual environment first:
+
+```bash
+cd quantum_hackathon_options_pricing
+source .venv/bin/activate          # macOS/Linux
+# or: .venv\Scripts\activate       # Windows
+```
+
+| # | Script | Purpose | Key outputs |
+|---|--------|---------|-------------|
+| 1 | `python src/hybrid_temporal_QRC.py` | Train the winning Temporal QRC model | Metrics to stdout |
+| 2 | `python src/variational_model.py` | Train the variational quantum circuit | `models/vartional_quantum_circuit_adam_optimize_and_qlike_loss.pt` |
+| 3 | `python src/classical_baseline.py` | Train MLP + LSTM baselines | `models/mlp_best.pt`, `models/lstm_best.pt`, `models/classical_preprocessing.pkl` |
+| 4 | `python src/test_evaluation.py` | Evaluate all models on the test set | `results/test_predictions.csv`, `results/test_metrics_summary.csv` |
+| 5 | `python src/visualizations.py` | Generate all result figures (`--no-show` for headless) | Six PNGs in `results/` |
 
 ---
 
@@ -173,6 +173,10 @@ By eliminating gradient training entirely, the barren plateau problem disappears
 4. **Temporal QRC adaptation** — photonic realisation of Li et al.'s input/memory qubit separation using MerLin CircuitBuilder; single LexGrouping replaces multi-seed ensemble
 5. **Ridge alpha tuning** — ablation sweep identifying the regularisation strength that balances quantum and classical feature contributions
 6. **Rigorous baseline comparison** — MLP and LSTM under identical conditions at every stage of development
+
+---
+
+**Authored by Tomoya Hatanaka, Olivia Laufer, Nitya Devaraj, Fatemeh Balaei, Mohamed Aziz Chebil — Fanot Qubits for GiQ Hackathon**
 
 
 

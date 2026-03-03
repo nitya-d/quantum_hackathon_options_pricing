@@ -17,8 +17,6 @@ https://oliviarosel.github.io/fanot_qubits_webpage/
 | LSTM Baseline | 0.017637 | 0.013449 | 0.021510 | Insufficient data for recurrent model |
 
 ---
-
----
 ## Repository Structure
 
 ```
@@ -61,74 +59,21 @@ quantum_hackathon_options_pricing/
 
 ## Running the Python Scripts
 
-All scripts live in `src/` and must be run from the **repository root** so that the relative paths (`data/`, `models/`, `results/`) resolve correctly. Make sure the virtual environment is activated first.
+All scripts live in `src/` and must be run from the **repository root**. Activate the virtual environment first:
 
 ```bash
-# from the repository root
 cd quantum_hackathon_options_pricing
 source .venv/bin/activate          # macOS/Linux
-# or: .venv\Scripts\activate       # Windows cmd
+# or: .venv\Scripts\activate       # Windows
 ```
 
-### 1. Hybrid Temporal QRC (winning model)
-
-Trains the fixed quantum reservoir + Ridge regression pipeline and prints validation metrics.
-
-```bash
-python src/hybrid_temporal_QRC.py
-```
-
-**Output:** RMSE / MAE / QLIKE printed to stdout; the fitted Ridge model is held in memory for evaluation.
-
----
-
-### 2. Variational Quantum Circuit model
-
-Trains the gradient-based variational quantum circuit with QLIKE loss and Adam optimiser.
-
-```bash
-python src/variational_model.py
-```
-
-**Output:** Per-epoch loss printed to stdout; best checkpoint saved to `models/vartional_quantum_circuit_adam_optimize_and_qlike_loss.pt`.
-
----
-
-### 3. Classical baselines (MLP + LSTM)
-
-Trains both classical baselines under identical conditions and prints QLIKE for each.
-
-```bash
-python src/classical_baseline.py
-```
-
-**Output:** Best checkpoints saved to `models/mlp_best.pt` and `models/lstm_best.pt`; preprocessing objects saved to `models/classical_preprocessing.pkl`.
-
----
-
-### 4. Test-set evaluation
-
-Loads the trained QRC model and runs inference on the held-out test set.
-
-```bash
-python src/test_evaluation.py
-```
-
-**Output:** Per-day metrics printed to stdout; final predictions written to `results/test_predictions.csv`.
-
----
-
-### 5. Visualisations
-
-Generates all result figures and saves them to `results/`. Pass `--no-show` to skip the interactive display (useful on headless servers).
-
-```bash
-python src/visualizations.py
-# or, to save without opening a window:
-python src/visualizations.py --no-show
-```
-
-**Output:** Six PNG files saved to `results/` — surface heatmaps, MAE heatmap, per-maturity QLIKE, model comparison, scatter plot, and time-series comparison.
+| # | Script | Purpose | Key outputs |
+|---|--------|---------|-------------|
+| 1 | `python src/hybrid_temporal_QRC.py` | Train the winning Temporal QRC model | Metrics to stdout |
+| 2 | `python src/variational_model.py` | Train the variational quantum circuit | `models/vartional_quantum_circuit_adam_optimize_and_qlike_loss.pt` |
+| 3 | `python src/classical_baseline.py` | Train MLP + LSTM baselines | `models/mlp_best.pt`, `models/lstm_best.pt`, `models/classical_preprocessing.pkl` |
+| 4 | `python src/test_evaluation.py` | Evaluate all models on the test set | `results/test_predictions.csv`, `results/test_metrics_summary.csv` |
+| 5 | `python src/visualizations.py` | Generate all result figures (`--no-show` for headless) | Six PNGs in `results/` |
 
 ---
 
@@ -207,67 +152,27 @@ By eliminating gradient training entirely, the barren plateau problem disappears
 
 ---
 
-## Team Setup & Environment
+## Setup
 
-We use a Python **venv** (not conda) to avoid corporate network issues with Anaconda channels.
+Requires **Python 3.11+**, **Git**, and **VS Code** (with Python + Jupyter extensions). Uses venv, not conda.
 
-### Prerequisites
+```bash
+git clone https://github.com/YOUR_USERNAME/quantum_hackathon_options_pricing.git
+cd quantum_hackathon_options_pricing
+python -m venv .venv
 
-- Python 3.11+ installed ([python.org](https://www.python.org/downloads/))
-- Git
-- VS Code with the Python and Jupyter extensions
+# Activate:
+source .venv/bin/activate              # macOS / Linux
+# .venv\Scripts\activate               # Windows cmd
+# .venv\Scripts\Activate.ps1           # Windows PowerShell
 
-### Steps
+pip install -r requirements.txt
+python -m ipykernel install --user --name quantum --display-name "Python (quantum)"
+```
 
-1. **Clone the repo** (use the fork URL your team lead shared)
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/quantum_hackathon_options_pricing.git
-   cd quantum_hackathon_options_pricing
-   ```
+Then in VS Code: open a notebook → kernel picker (top-right) → **Python Environments** → **quantum**.
 
-2. **Create a virtual environment**
-   ```bash
-   python -m venv .venv
-   ```
-
-3. **Activate it**
-
-   - **Windows (cmd / Anaconda Prompt):**
-     ```bash
-     .venv\Scripts\activate
-     ```
-   - **Windows (PowerShell):**
-     ```powershell
-     .venv\Scripts\Activate.ps1
-     ```
-   - **macOS / Linux:**
-     ```bash
-     source .venv/bin/activate
-     ```
-
-4. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-   > **Note:** If `torch` fails with a DLL error on Windows, install the [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe), restart, and try again.
-
-5. **Register the Jupyter kernel**
-   ```bash
-   python -m ipykernel install --user --name quantum --display-name "Python (quantum)"
-   ```
-
-6. **Select the kernel in VS Code**
-
-   Open a notebook → click the kernel picker (top-right) → **Select Another Kernel** → **Python Environments** → pick **quantum** or **Python (quantum)**.
-
-### Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| `numpy.core.multiarray failed to import` | `pip install "numpy<2"` (already pinned in requirements.txt) |
-| PyTorch DLL error (`c10.dll`) | Install [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) and restart |
-| Conda channels 403 Forbidden | Don't use conda — follow the venv steps above |
+> **Troubleshooting:** PyTorch DLL error on Windows → install [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) and restart. NumPy import error → `pip install "numpy<2"` (already pinned in requirements.txt).
 
 ---
 

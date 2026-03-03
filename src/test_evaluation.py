@@ -35,7 +35,6 @@ print(f"Config: {N_MODES} modes ({N_INPUT_MODES}+{N_MEMORY_MODES}), "
 
 train_df = pd.read_excel("data/train.xlsx", index_col=0)
 test_df  = pd.read_excel("data/test.xlsx", index_col=0)
-
 feature_cols = train_df.columns.tolist()
 
 print(f"Train: {train_df.shape}  ({train_df.index[0]} → {train_df.index[-1]})")

@@ -213,8 +213,7 @@ for i, date in enumerate(test_df.index):
 
 pred_df = pd.DataFrame(test_preds, index=test_df.index, columns=feature_cols)
 pred_df.index.name = "Date"
-pred_df.to_csv("test_predictions.csv")
-pred_df.to_excel("test_predictions.xlsx")
+pred_df.to_csv("results/test_predictions.csv")
 
 print(f"Saved predictions to test_predictions.csv / .xlsx")
 print(f"Shape: {pred_df.shape}")

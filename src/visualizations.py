@@ -2,11 +2,13 @@
 QRC Swaption Surface — Visualizations
 ======================================
 
-Requires val_true.csv and val_pred.csv produced by research_paper V2.
+Requires:
+  - data/test.csv          ground-truth test implied vols  (Date index, 224 cols)
+  - data/test_predictions.csv  model predictions           (same shape)
 
 Figures produced:
   1. Actual vs Predicted surface heatmap (single day)
-  2. Mean absolute error heatmap over all validation days
+  2. Mean absolute error heatmap over all test days
   3. Per-maturity QLIKE profile
   4. Model comparison bar chart (all QLIKE scores)
   5. Predicted vs Actual scatter (all cells, all days)
@@ -14,9 +16,11 @@ Figures produced:
 
 Usage
 -----
-  python visualizations.py                        # looks for CSVs in same folder
-  python visualizations.py --data-dir path/to/   # custom CSV + output directory
-  python visualizations.py --no-show             # save figures without displaying
+  python src/visualizations.py                         # default paths
+  python src/visualizations.py --no-show              # save without displaying
+  python src/visualizations.py \\
+      --true-file data/test.csv \\
+      --pred-file results/test_predictions.csv
 """
 
 from __future__ import annotations
@@ -30,6 +34,8 @@ import pandas as pd
 import warnings
 
 warnings.filterwarnings("ignore")
+
+ROOT_DIR = Path(__file__).resolve().parent.parent   # project root
 
 # ── Style ────────────────────────────────────────────────────────────────────
 plt.rcParams.update({
@@ -51,6 +57,18 @@ EPS = 1e-6
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
+
+def load_df(path: Path) -> pd.DataFrame:
+    """Load a CSV or Excel file (handles .csv files that are actually xlsx)."""
+    try:
+        df = pd.read_csv(path, index_col=0)
+        # Sanity-check: if we get mostly NaN it's probably a misnamed xlsx
+        if df.isnull().values.mean() > 0.5:
+            raise ValueError("too many NaNs — likely misnamed xlsx")
+        return df
+    except Exception:
+        return pd.read_excel(path, index_col=0)
+
 
 def qlike(true: np.ndarray, pred: np.ndarray) -> float:
     p = np.clip(pred, EPS, None)
@@ -355,10 +373,14 @@ def fig6_timeseries(val_true, val_pred, feature_cols, maturities, data_dir, show
 def main() -> None:
     ap = argparse.ArgumentParser(description="QRC Swaption Surface Visualizations")
     ap.add_argument(
-        "--data-dir", type=str,
-        default=str(Path(__file__).resolve().parent),
-        help="Directory containing val_true.csv and val_pred.csv "
-             "(figures are saved here too). Default: same folder as this script.",
+        "--true-file", type=str,
+        default=str(ROOT_DIR / "data" / "test.csv"),
+        help="Ground-truth test file (CSV or Excel). Default: data/test.csv",
+    )
+    ap.add_argument(
+        "--pred-file", type=str,
+        default=str(ROOT_DIR / "data" / "test_predictions.csv"),
+        help="Predictions file (CSV or Excel). Default: data/test_predictions.csv",
     )
     ap.add_argument(
         "--no-show", action="store_true",
@@ -366,21 +388,25 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    data_dir = Path(args.data_dir)
-    show     = not args.no_show
+    true_path = Path(args.true_file)
+    pred_path = Path(args.pred_file)
+    show      = not args.no_show
+
+    # figures are saved alongside the predictions file
+    data_dir  = pred_path.parent
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     # ── Load data ──
-    true_path = data_dir / "val_true.csv"
-    pred_path = data_dir / "val_pred.csv"
-
-    if not true_path.exists() or not pred_path.exists():
+    if not true_path.exists():
+        raise FileNotFoundError(f"Ground-truth file not found: {true_path}")
+    if not pred_path.exists():
         raise FileNotFoundError(
-            f"Expected val_true.csv and val_pred.csv in {data_dir}\n"
-            "Run research_paper V2 first to generate these files."
+            f"Predictions file not found: {pred_path}\n"
+            "Run test_eval.py first to generate it."
         )
 
-    df_true = pd.read_csv(true_path)
-    df_pred = pd.read_csv(pred_path)
+    df_true = load_df(true_path)
+    df_pred = load_df(pred_path)
 
     feature_cols = list(df_true.columns)
     val_true     = df_true.values.astype(np.float32)
@@ -395,11 +421,11 @@ def main() -> None:
     print("=" * 62)
     print("  QRC SWAPTION SURFACE — VISUALIZATIONS")
     print("=" * 62)
-    print(f"  Loaded  : {N_val} validation days")
-    print(f"  Grid    : {N_T} tenors × {N_M} maturities = {N_T * N_M} cells")
-    print(f"  Tenors  : {tenors}")
-    print(f"  Data dir: {data_dir}")
-    print(f"  Overall QLIKE : {qlike(val_true, val_pred):.6f}")
+    print(f"  Ground truth : {true_path}")
+    print(f"  Predictions  : {pred_path}")
+    print(f"  Test days    : {N_val}")
+    print(f"  Grid         : {N_T} tenors × {N_M} maturities = {N_T * N_M} cells")
+    print(f"  Overall QLIKE: {qlike(val_true, val_pred):.6f}")
     print()
 
     fig1_surface_comparison(val_true, val_pred, feature_cols, tenors, maturities,

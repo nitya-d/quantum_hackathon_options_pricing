@@ -67,6 +67,38 @@ Example with a specific file and classical backend:
 .venv/bin/python main.py --data_file data/train.csv --regressor lgbm --lookback 8 --n_qubits 8
 ```
 
+### Results (example run)
+
+The command above produces Qiskit-Fall-Fest-style artifacts under `results/`.
+
+- **Summary file**: `results/results_summary.txt`
+- **Plots**:
+  - `results/prediction_plot.png`
+  - `results/train_predictions.png`
+  - `results/test_predictions.png`
+  - `results/residuals.png`
+
+**Latest run metrics** (from `results/results_summary.txt`):
+
+- **Config**: `n_qubits=8`, `depth=3`, `encoding=angle`, `lookback=8`, `regressor=lgbm`
+- **Test**: R2 = **-0.056195**, MSE = **0.092340**, RMSE = **0.303874**, MAE = **0.221406**, MAPE = **0.9639%**
+
+#### Prediction plot
+
+![prediction_plot](results/prediction_plot.png)
+
+#### Train predictions
+
+![train_predictions](results/train_predictions.png)
+
+#### Test predictions
+
+![test_predictions](results/test_predictions.png)
+
+#### Residuals
+
+![residuals](results/residuals.png)
+
 **Key CLI options (kept similar to the old repo):**
 
 | Option | Default | Description |

@@ -59,8 +59,7 @@ LSTM_LAYERS       = 2     # stacked LSTM layers
 # 1. LOAD DATA  (identical to quantum model)
 # ─────────────────────────────────────────────
 print("Loading dataset...")
-ds = pd.read_excel("data/train.xlsx", index_col=0)
-df = ds.to_pandas()
+df = pd.read_excel("data/train.xlsx", index_col=0)
 df["Date"] = pd.to_datetime(df["Date"], dayfirst=True)
 df = df.sort_values("Date").reset_index(drop=True)
 

@@ -379,7 +379,7 @@ def main() -> None:
     )
     ap.add_argument(
         "--pred-file", type=str,
-        default=str(ROOT_DIR / "data" / "test_predictions.csv"),
+        default=str(ROOT_DIR / "results" / "test_predictions.csv"),
         help="Predictions file (CSV or Excel). Default: data/test_predictions.csv",
     )
     ap.add_argument(

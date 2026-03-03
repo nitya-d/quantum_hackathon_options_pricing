@@ -17,8 +17,6 @@ https://oliviarosel.github.io/fanot_qubits_webpage/
 | LSTM Baseline | 0.017637 | 0.013449 | 0.021510 | Insufficient data for recurrent model |
 
 ---
-
----
 ## Repository Structure
 
 ```
@@ -260,14 +258,6 @@ We use a Python **venv** (not conda) to avoid corporate network issues with Anac
 6. **Select the kernel in VS Code**
 
    Open a notebook → click the kernel picker (top-right) → **Select Another Kernel** → **Python Environments** → pick **quantum** or **Python (quantum)**.
-
-### Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| `numpy.core.multiarray failed to import` | `pip install "numpy<2"` (already pinned in requirements.txt) |
-| PyTorch DLL error (`c10.dll`) | Install [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) and restart |
-| Conda channels 403 Forbidden | Don't use conda — follow the venv steps above |
 
 ---
 

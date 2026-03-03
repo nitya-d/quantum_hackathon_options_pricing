@@ -88,12 +88,19 @@ def main() -> None:
     print("  Hybrid Temporal Quantum Reservoir Computing")
     print("=" * 62)
 
-    # ── Load ground truth ──
+    # ── Get canonical column order from training data ──
+    train_df = pd.read_parquet(ROOT_DIR / "data" / "level1.parquet")
+    train_df["Date"] = pd.to_datetime(train_df["Date"], format="mixed")
+    train_df = train_df.sort_values("Date").reset_index(drop=True)
+    feature_cols = [c for c in train_df.columns if c != "Date"]
+
+    # ── Load ground truth (indexed by TRAINING column order) ──
     test_path = ROOT_DIR / "data" / "test.xlsx"
-    test_df   = pd.read_excel(test_path, index_col=0)
-    test_true = test_df.values.astype(np.float64)
+    test_df   = pd.read_excel(test_path)
+    test_df["Date"] = pd.to_datetime(test_df["Date"], format="mixed")
+    test_df   = test_df.set_index("Date")
+    test_true = test_df[feature_cols].astype(np.float64).values
     n_test    = len(test_df)
-    feature_cols = test_df.columns.tolist()
 
     print(f"\n  Ground truth : {test_path.name}")
     print(f"  Shape        : {test_df.shape}")

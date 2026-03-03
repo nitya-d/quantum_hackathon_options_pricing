@@ -370,3 +370,34 @@ def evaluate(model, X_val_tensor, name):
 
 mlp_results  = evaluate(mlp_model,  X_flat_val, "MLP Baseline")
 lstm_results = evaluate(lstm_model, X_seq_val,  "LSTM Baseline")
+
+# ─────────────────────────────────────────────
+# SAVE MODELS + PREPROCESSING
+# ─────────────────────────────────────────────
+from pathlib import Path
+import joblib
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+models_dir = ROOT_DIR / "models"
+models_dir.mkdir(exist_ok=True)
+
+torch.save(mlp_model.state_dict(),  str(models_dir / "mlp_best.pt"))
+torch.save(lstm_model.state_dict(), str(models_dir / "lstm_best.pt"))
+
+# Save preprocessing so test_evaluation.py can reconstruct identical transforms
+joblib.dump({
+    "scaler": scaler,
+    "pca": pca,
+    "pca_scaler": pca_scaler,
+    "feature_cols": feature_cols,
+    "config": {
+        "N_PCA_COMPONENTS": N_PCA_COMPONENTS,
+        "LOOKBACK": LOOKBACK,
+        "LSTM_HIDDEN": LSTM_HIDDEN,
+        "LSTM_LAYERS": LSTM_LAYERS,
+    },
+}, str(models_dir / "classical_preprocessing.pkl"))
+
+print(f"\nSaved → models/mlp_best.pt")
+print(f"Saved → models/lstm_best.pt")
+print(f"Saved → models/classical_preprocessing.pkl")

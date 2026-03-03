@@ -198,7 +198,7 @@ def qlike_numpy(true: 'np.ndarray', pred: 'np.ndarray') -> float:
 # Sanity check: perfect predictions should give QLIKE ≈ 0
 x = torch.full((4, len(feature_cols)), 0.2)
 assert qlike_loss(x, x).item() < 1e-4, "QLIKE(x,x) should be ≈ 0"
-print("QLIKE loss ready ✓  (sanity check passed: QLIKE(x,x) ≈ 0)")
+
 
 # ─────────────────────────────────────────────
 # 7. TRAIN

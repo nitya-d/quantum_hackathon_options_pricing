@@ -27,7 +27,12 @@ DEVICE            = torch.device("cpu")
 # ─────────────────────────────────────────────
 
 print("Loading dataset...")
-df = pd.read_excel("data/train.xlsx", index_col=0)
+ds = load_dataset(
+    "Quandela/Challenge_Swaptions",
+    data_files="level-1_Future_prediction/train.csv",   # NOT level-2!
+    split="train",
+)
+df = ds.to_pandas()
 df["Date"] = pd.to_datetime(df["Date"], dayfirst=True)
 df = df.sort_values("Date").reset_index(drop=True)
 

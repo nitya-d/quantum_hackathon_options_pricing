@@ -115,6 +115,8 @@ quantum_hackathon_options_pricing/
 │
 ├── requirements.txt            # All Python dependencies
 └── README.md                   # This file
+└── PDF summary.pdf                   # PDF summary
+
 ```
 
 ---

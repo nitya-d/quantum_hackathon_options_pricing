@@ -77,6 +77,30 @@ source .venv/bin/activate          # macOS/Linux
 
 ---
 
+## Setup
+
+Requires **Python 3.11+**, **Git**, and **VS Code** (with Python + Jupyter extensions). Uses venv, not conda.
+
+```bash
+git clone https://github.com/YOUR_USERNAME/quantum_hackathon_options_pricing.git
+cd quantum_hackathon_options_pricing
+python -m venv .venv
+
+# Activate:
+source .venv/bin/activate              # macOS / Linux
+# .venv\Scripts\activate               # Windows cmd
+# .venv\Scripts\Activate.ps1           # Windows PowerShell
+
+pip install -r requirements.txt
+python -m ipykernel install --user --name quantum --display-name "Python (quantum)"
+```
+
+Then in VS Code: open a notebook → kernel picker (top-right) → **Python Environments** → **quantum**.
+
+> **Troubleshooting:** PyTorch DLL error on Windows → install [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) and restart. NumPy import error → `pip install "numpy<2"` (already pinned in requirements.txt).
+
+---
+
 ## Development Journey
 
 ### Step 1 — Classical baselines
@@ -150,30 +174,5 @@ By eliminating gradient training entirely, the barren plateau problem disappears
 5. **Ridge alpha tuning** — ablation sweep identifying the regularisation strength that balances quantum and classical feature contributions
 6. **Rigorous baseline comparison** — MLP and LSTM under identical conditions at every stage of development
 
----
-
-## Setup
-
-Requires **Python 3.11+**, **Git**, and **VS Code** (with Python + Jupyter extensions). Uses venv, not conda.
-
-```bash
-git clone https://github.com/YOUR_USERNAME/quantum_hackathon_options_pricing.git
-cd quantum_hackathon_options_pricing
-python -m venv .venv
-
-# Activate:
-source .venv/bin/activate              # macOS / Linux
-# .venv\Scripts\activate               # Windows cmd
-# .venv\Scripts\Activate.ps1           # Windows PowerShell
-
-pip install -r requirements.txt
-python -m ipykernel install --user --name quantum --display-name "Python (quantum)"
-```
-
-Then in VS Code: open a notebook → kernel picker (top-right) → **Python Environments** → **quantum**.
-
-> **Troubleshooting:** PyTorch DLL error on Windows → install [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) and restart. NumPy import error → `pip install "numpy<2"` (already pinned in requirements.txt).
-
----
 
 

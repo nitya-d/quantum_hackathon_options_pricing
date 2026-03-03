@@ -101,8 +101,14 @@ The command above produces Qiskit-Fall-Fest-style artifacts under `results/`.
 
 **Latest run metrics** (from `results/results_summary.txt`):
 
-- **Config**: `n_qubits=8`, `depth=3`, `encoding=angle`, `lookback=8`, `regressor=lgbm`
-- **Test**: R2 = **-0.056195**, MSE = **0.092340**, RMSE = **0.303874**, MAE = **0.221406**, MAPE = **0.9639%**
+| Item      | Value                                                                 |
+|-----------|-----------------------------------------------------------------------|
+| Config    | `n_qubits=8`, `depth=3`, `encoding=angle`, `lookback=8`, `regressor=lgbm` |
+| Test R²   | **-0.056195**                                                        |
+| Test MSE  | **0.092340**                                                         |
+| Test RMSE | **0.303874**                                                         |
+| Test MAE  | **0.221406**                                                         |
+| Test MAPE | **0.9639%**                                                          |
 
 #### Prediction plot (test prices)
 

@@ -30,7 +30,7 @@ import pandas as pd
 from sklearn.metrics import mean_squared_error
 
 # ── Add src/ to path so we can import from hybrid_temporal_QRC ──
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR / "src"))
 
 from hybrid_temporal_QRC import (  # noqa: E402

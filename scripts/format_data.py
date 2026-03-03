@@ -1,7 +1,7 @@
 """
 Format all datasets in data/ into pandas-friendly CSV files.
 
-- Reads Excel files (train.xlsx, test_template.xlsx, sample_Simulated_Swaption_Price.xlsx).
+- Reads Excel files (train.xlsx, test.xlsx, test_template.xlsx, sample_Simulated_Swaption_Price.xlsx).
 - Normalizes: Date first (as datetime), then Tenor/Maturity columns in stable order, Type last if present.
 - Saves as CSV with consistent dtypes and date format (ISO).
 """
@@ -18,6 +18,7 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 # File name -> (path, sheet name or 0)
 DATASETS = {
     "train.xlsx": ("train.xlsx", 0),
+    "test.xlsx": ("test.xlsx", 0),
     "test_template.xlsx": ("test_template.xlsx", 0),
     "sample_Simulated_Swaption_Price.xlsx": ("sample_Simulated_Swaption_Price.xlsx", "Swaption price data sample"),
 }

@@ -28,7 +28,7 @@ Multi-seed ensemble: average predictions from top-k reservoirs (by val QLIKE).
 Produces
 --------
   models/qrc_test_pred.npy  (n_test_days, 224)
-  → Loaded by notebooks/Test_evaluation.ipynb for test metrics.
+  → Loaded by notebooks/05_Test_Evaluation.ipynb for test metrics.
 
 ⚠  test.xlsx is NEVER loaded or referenced here.
 
@@ -450,7 +450,7 @@ def main(cfg: Optional[QRCConfig] = None) -> None:
           f"  shape={ens_pred[:cfg.n_test_days].shape}")
     print(f"  Total time    : {elapsed:.1f}s")
     print()
-    print("  → Run notebooks/Test_evaluation.ipynb for test metrics")
+    print("  → Run notebooks/05_Test_Evaluation.ipynb for test metrics")
     print("  ⚠  test.xlsx was NEVER loaded in this script")
     print("=" * 62)
 

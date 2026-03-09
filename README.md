@@ -1,111 +1,210 @@
-# Track B: Quantum Machine Learning for Options Pricing
+# Quantum Reservoir Computing for Swaption Volatility Forecasting
 
-## Team Setup & Environment
+> **TL;DR** — A photonic Quantum Reservoir Computer (10 modes, 5 photons) beats an LSTM baseline by 19% on swaption implied-volatility surface forecasting (QLIKE 0.000879 vs 0.001081). Under hardware-realistic noise the advantage narrows to parity, but all noisy profiles still outperform MLP by >3×.
 
-We use a Python **venv** (not conda) to avoid corporate network issues with Anaconda channels.
-
-### Prerequisites
-
-- Python 3.11+ installed ([python.org](https://www.python.org/downloads/))
-- Git
-- VS Code with the Python and Jupyter extensions
-
-### Steps
-
-1. **Clone the repo** (use the fork URL your team lead shared)
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/quantum_hackathon_options_pricing.git
-   cd quantum_hackathon_options_pricing
-   ```
-
-2. **Create a virtual environment**
-   ```bash
-   python -m venv .venv
-   ```
-
-3. **Activate it**
-
-   - **Windows (cmd / Anaconda Prompt):**
-     ```bash
-     .venv\Scripts\activate
-     ```
-   - **Windows (PowerShell):**
-     ```powershell
-     .venv\Scripts\Activate.ps1
-     ```
-   - **macOS / Linux:**
-     ```bash
-     source .venv/bin/activate
-     ```
-
-4. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-   > **Note:** If `torch` fails with a DLL error on Windows, install the [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe), restart, and try again.
-
-5. **Register the Jupyter kernel**
-   ```bash
-   python -m ipykernel install --user --name quantum --display-name "Python (quantum)"
-   ```
-
-6. **Select the kernel in VS Code**
-
-   Open a notebook → click the kernel picker (top-right) → **Select Another Kernel** → **Python Environments** → pick **quantum** or **Python (quantum)**.
-
-### Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| `numpy.core.multiarray failed to import` | `pip install "numpy<2"` (already pinned in requirements.txt) |
-| PyTorch DLL error (`c10.dll`) | Install [VC++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) and restart |
-| Conda channels 403 Forbidden | Don't use conda — follow the venv steps above |
-
----
-
-## Hackathon Resources
-
-See [HACKATHON_RESOURCES.md](HACKATHON_RESOURCES.md) for the full hackathon overview, all track descriptions, and community links.
-
-## Track B Study Materials
-
-See [preparation_materials/Track_B_Quandela.md](preparation_materials/Track_B_Quandela.md) for the full reading list, SDK docs, and technical constraints.
-
----
-
-## Noise Analysis — Interpreting QRC vs LSTM under Hardware Noise
-
-### Test results (6 days × 224 instruments, QLIKE metric)
+![Python](https://img.shields.io/badge/Python-3.11+-blue) ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-red) ![Perceval](https://img.shields.io/badge/Perceval-1.1-blueviolet) ![MerLin](https://img.shields.io/badge/MerLin-0.3-blueviolet) ![scikit-learn](https://img.shields.io/badge/scikit--learn-1.0+-orange) ![License](https://img.shields.io/badge/License-MIT-green)
 
 | Model | Test QLIKE | vs LSTM |
 |:------|:----------:|:-------:|
 | MLP | 0.003921 | +263% |
 | LSTM | 0.001081 | — |
-| **QRC (perfect)** | **0.000879** | **−18.7%** |
-| QRC (pessimistic) | 0.001110 | +2.7% |
-| QRC (optimistic) | 0.001147 | +6.1% |
-| QRC (hardware) | 0.001286 | +19.0% |
+| **QRC (perfect sim)** | **0.000879** | **−18.7%** |
+| QRC (pessimistic noise) | 0.001110 | +2.7% |
+| QRC (optimistic noise) | 0.001147 | +6.1% |
+| QRC (hardware noise) | 0.001286 | +19.0% |
 
-### Is QRC (hardware) being 19% worse than LSTM statistically significant?
+*6 test days × 224 instruments. QLIKE = ratio − ln(ratio) − 1 (lower is better).*
 
-**No.** With only 6 test days, there is far too little data for statistical significance. A paired test on 6 observations has almost no power. The absolute gap is just 0.000205 (0.001286 vs 0.001081). From the per-day breakdown, LSTM beats QRC_hw on 4/6 days but QRC_hw wins on the later days in the horizon. This looks more like sampling noise than a robust difference. At N=6 we can say "competitive" but not much more.
+---
 
-### Why is optimistic noise worse than pessimistic?
+## Motivation
 
-This is counterintuitive — the optimistic profile has objectively better hardware parameters (higher brightness=0.30, higher indistinguishability=0.96, lower phase noise=0.02). But "better hardware simulation" ≠ "better downstream QLIKE" because:
+Swaption implied-volatility surfaces are high-dimensional (14 tenors × 16 maturities = 224 instruments), highly correlated, and notoriously difficult to forecast. Classical deep-learning models (MLP, LSTM) work well but require many trainable parameters relative to the small training set (~435 days).
 
-1. **Higher brightness → more detected photons → different output distribution shape.** The Ridge readout was trained on *perfect* features. Noisy features with more photons detected shift the feature space in a different direction than fewer photons. Neither is "closer to perfect" — they're just *different* distortions.
+**Quantum Reservoir Computing** offers an alternative: a fixed random photonic circuit acts as a nonlinear feature engine with *zero* trainable quantum parameters, while a simple Ridge regression handles the readout. This sidesteps barren plateaus and overfitting — key NISQ-era advantages.
 
-2. **The gap is tiny**: 0.001147 vs 0.001110 = 3.3%. With 6 test days and 3 ensemble seeds, this is well within sampling noise.
+This project asks: **can a photonic QRC beat classical baselines on a realistic financial forecasting task, and does the advantage survive hardware noise?**
 
-3. **Noise model parameters interact nonlinearly** through the Fock space distribution. There is no reason to expect monotonic degradation across all parameters simultaneously.
+> **Caveat:** The dataset is *synthetic* (generated by [Quandela](https://huggingface.co/datasets/Quandela/Challenge_Swaptions?_sm_vck=TCQns0CPsvtSr66TLR07ZZTCp7TMC44FZkPJ4sPpp5WM0VMsrDjH) for a hackathon). Results are indicative of the method's potential, not a claim of production-ready quantum advantage. Phase 2 (real market data) is planned — see [Planned Work](#planned-work).
 
-### Bottom line
+---
 
-The ordering (pessimistic < optimistic < hardware) is **not meaningful** at this sample size. All three noisy profiles cluster at 0.0011–0.0013 — essentially the same performance band, all competitive with LSTM. The real story:
+## Quick Start
 
-- **Perfect QRC clearly beats LSTM** (−19%)
-- **Noise adds a ~26–46% penalty** vs perfect
-- **That penalty puts noisy QRC roughly at parity with LSTM**
-- **Pessimistic is only 2.7% from LSTM** — noise mitigation (ZNE) or larger ensembles could close the gap
+```bash
+git clone https://github.com/YOUR_USERNAME/quantum_hackathon_options_pricing.git
+cd quantum_hackathon_options_pricing
+python -m venv .venv
+
+# Activate:
+# Windows PowerShell:  .venv\Scripts\Activate.ps1
+# macOS/Linux:         source .venv/bin/activate
+
+pip install -r requirements.txt
+python -m ipykernel install --user --name quantum --display-name "Python (quantum)"
+```
+
+Then run the notebooks **in order** (1→5) — each one builds on the outputs of the previous:
+
+| # | Notebook | Purpose |
+|:-:|----------|---------|
+| 1 | `01_EDA.ipynb` | Exploratory data analysis, PCA, stationarity tests |
+| 2 | `02_Classical_Baselines.ipynb` | MLP & LSTM baselines (20-day window → 10-day horizon) |
+| 3 | `03_QRC.ipynb` | Quantum Reservoir Computing — 30-seed sweep + top-3 ensemble |
+| 4 | `04_QRC_Noisy_vs_Perfect.ipynb` | Noise comparison — perfect vs 3 hardware-realistic profiles |
+| 5 | `05_Test_Evaluation.ipynb` | Final held-out test evaluation across all models |
+
+Two additional notebooks (`A1_FirstQuantumLayers_with_MerLin.ipynb`, `A2_HOM_Perceval.ipynb`) are pedagogical tutorials on Perceval and MerLin — not required for the pipeline.
+
+---
+
+## Repository Structure
+
+```
+├── data/
+│   ├── level1.parquet          # Full swaption surface (494 days × 224 instruments)
+│   ├── level2.parquet          # Subset with missing values (489 days) — intended for data imputation challenge
+│   └── test.xlsx               # Held-out test set (6 days)
+├── notebooks/                  # Main pipeline (run in order)
+├── models/
+│   ├── mlp_best.pt             # Trained MLP weights
+│   ├── lstm_best.pt            # Trained LSTM weights
+│   ├── reservoir_seed{5,15,16}.pt  # Frozen QRC reservoir weights
+│   ├── qrc_test_pred.npy       # QRC ensemble test predictions (perfect, from 03_QRC.ipynb)
+│   ├── qrc_noisy_test_pred_*.npy   # QRC test predictions per noise profile
+│   ├── qrc_noisy_features.npz     # Cached single-seed noisy quantum features
+│   └── qrc_noisy_features_ensemble.npz  # Cached ensemble noisy quantum features
+├── results/                    # Saved plots (PNG)
+└── notes/                      # Strategy docs, research notes & expansion plans
+```
+
+---
+
+## Literature & Background
+
+This project draws on two key ideas:
+
+1. **Quantum Reservoir Computing** — Using a fixed (untrained) quantum circuit as a nonlinear feature map, with a classical readout layer. This avoids the barren plateau problem that plagues variational quantum circuits. See: Li et al., [*Quantum Reservoir Computing for Realized Volatility Forecasting*](https://arxiv.org/pdf/2505.13933) (2025).
+
+2. **Photonic QML with Perceval/MerLin** — Quandela's photonic simulation stack enables photon-number-resolved mode expectations as features, and realistic hardware noise modelling. See: Notton et al., [*Establishing Baselines for Photonic Quantum Machine Learning*](https://arxiv.org/abs/2510.25839) (2025).
+
+The **QLIKE** loss (quasi-likelihood: ratio − ln(ratio) − 1) is the standard volatility forecast evaluation metric in quantitative finance, preferred over MSE because it penalises under-prediction of volatility — a critical property for risk management.
+
+---
+
+## Approach
+
+```
+ ┌──────────┐     ┌─────────────┐     ┌──────────────┐     ┌───────────────┐     ┌────────────┐
+ │   EDA    │ ──▶ │  Classical  │ ──▶ │     QRC      │ ──▶ │  QRC Noise   │ ──▶ │   Test     │
+ │ PCA, ADF │     │  MLP, LSTM  │     │  30-seed     │     │  4 profiles  │     │   Eval     │
+ │ stationr │     │  baselines  │     │  ensemble    │     │  perfect vs  │     │  all models│
+ └──────────┘     └─────────────┘     └──────────────┘     │  hardware    │     └────────────┘
+                                                           └───────────────┘
+```
+
+### 1. Data & EDA
+
+The dataset is a synthetic swaption implied-volatility surface: 494 days × 224 instruments (14 tenors × 16 maturities). PCA reveals that **3 components capture 99% of variance** (level, slope, curvature) — highly compressible. Strong autocorrelation confirms that time-series forecasting is viable.
+
+### 2. Classical Baselines
+
+Two neural networks trained on a 20-day sliding window to predict 10 days ahead:
+
+- **MLP** — 3-layer feedforward (64 hidden, dropout 0.3, ~18K params). Overfits on this small dataset.
+- **LSTM** — 1-layer recurrent (64 hidden, ~218K params). Better captures temporal structure. Both use early stopping and learning rate scheduling.
+
+### 3. Quantum Reservoir Computing
+
+The core contribution. Architecture:
+
+- **Dimensionality reduction:** PCA (224 → 4 components), angle-encoded to [0, π]
+- **Photonic circuit:** 10 modes, 5 photons, 3 temporal steps (memory-loop)
+  - 4 input modes carry encoded data; 6 hidden modes retain state across steps
+  - Entangling layers (beam splitters and phase shifters, similar to MZI meshes) interleaved with angle-encoding layers
+  - Parameters randomised from U(0, 2π) then **frozen** — zero trainable quantum parameters
+- **Features:** Mode expectations (10-d vector per step) → concatenated across ensemble seeds
+- **Readout:** `RidgeCV` with 50 log-spaced alphas — the *only* trained component
+- **Ensemble:** 30-seed × 3-window-size sweep → top-3 by validation QLIKE (seeds 5, 15, 16; all W=20)
+
+**Why this works:** The fixed reservoir provides a rich, nonlinear feature space while Ridge regression prevents overfitting on just 435 training samples. Classical NNs must optimise thousands of parameters on the same data — the QRC has effectively *none*.
+
+### 4. Noise Comparison
+
+To test real-world viability, the same ensemble is re-evaluated under Perceval's `NoiseModel` with four profiles:
+
+| Profile | Brightness | Indistinguishability | g² | Transmittance | Phase noise |
+|---------|:----------:|:--------------------:|:--:|:-------------:|:-----------:|
+| Perfect | — | — | — | — | — |
+| Hardware | 0.15 | 0.92 | 0.01 | 0.1 | 0.05 |
+| Optimistic | 0.30 | 0.96 | 0.005 | 0.2 | 0.02 |
+| Pessimistic | 0.08 | 0.85 | 0.03 | 0.05 | 0.10 |
+
+<details>
+<summary><strong>What do these noise parameters mean?</strong></summary>
+
+- **Brightness (η)** — Probability the photon source emits a photon when triggered. η=0.15 means only 15% of triggers produce a photon; fewer detected photons = noisier statistics.
+- **Indistinguishability (M)** — How identical the photons are. Quantum interference only works with indistinguishable photons; M=0.92 means 8% of photons behave classically and fail to interfere.
+- **g² (second-order correlation)** — Multi-photon emission rate. Ideally g²=0 (perfect single-photon source); g²=0.01 means ~1% of emissions produce 2 photons instead of 1, corrupting the intended Fock state.
+- **Transmittance (T)** — Fraction of photons surviving the chip's waveguides. T=0.1 means 90% photon loss — very lossy.
+- **Phase imprecision (δφ)** — Random error on phase shifter angles. The circuit's unitary transformation deviates from design by ±δφ.
+
+</details>
+
+Raw Perceval `Processor` objects are used (MerLin's `QuantumLayer` bypasses noise), with the same frozen circuit parameters extracted from saved `.pt` files.
+
+---
+
+## Results
+
+### Test Performance (6 days × 224 instruments)
+
+| Model | Test QLIKE | Test RMSE | vs LSTM (QLIKE) |
+|:------|:----------:|:---------:|:---------------:|
+| MLP | 0.003921 | 0.015962 | +263% |
+| LSTM | 0.001081 | 0.007712 | — |
+| **QRC (perfect)** | **0.000879** | **0.009212** | **−18.7%** |
+| QRC (pessimistic) | 0.001110 | 0.010294 | +2.7% |
+| QRC (optimistic) | 0.001147 | 0.010597 | +6.1% |
+| QRC (hardware) | 0.001286 | 0.010608 | +19.0% |
+
+![Test predictions vs actuals](results/test_all_models_vs_actual.png)
+
+![QRC noise comparison](results/qrc_noisy_ensemble_test_qlike.png)
+
+### Noise Analysis
+
+All three noisy QRC profiles cluster at QLIKE 0.0011–0.0013 — essentially the same performance band. The ordering (pessimistic < optimistic < hardware) is **not statistically meaningful** with only 6 test days; noise model parameters interact nonlinearly through the Fock space distribution. Key takeaways:
+
+- **Perfect QRC clearly beats LSTM** (−19% QLIKE)
+- **Hardware noise adds a 26–46% penalty** vs perfect simulation
+- **That penalty puts noisy QRC at rough parity with LSTM** — still competitive
+- **All noisy QRC profiles beat MLP by >3×**
+- **Pessimistic is only 2.7% from LSTM** — noise mitigation techniques (ZNE) or larger ensembles could close the gap
+
+> With only 6 test days, these results are indicative rather than statistically conclusive. See [04_QRC_Noisy_vs_Perfect.ipynb](notebooks/04_QRC_Noisy_vs_Perfect.ipynb) for per-day breakdowns and visualisations.
+
+---
+
+## Planned Work
+
+### Phase 2 — Real Market Data
+- Source SPX swaption implied-volatility data (OptionMetrics via WRDS, or free CBOE delayed data)
+- Retrain the full pipeline (PCA → QRC → Ridge) on real surfaces and re-evaluate all models
+- Even one asset class would validate whether the QRC advantage transfers from synthetic to real market dynamics
+
+### Noise Mitigation & Hardware
+- Apply **Zero-Noise Extrapolation (ZNE)** — run the circuit at multiple noise scales, extrapolate to zero noise — to close the 26–46% noise penalty
+- Execute on **Quandela Cloud QPU** to compare real hardware output against simulated noise profiles
+- Benchmark photon loss rates and fidelity against the pessimistic/hardware profiles used here
+
+### Scaling & Architecture
+- Larger ensembles (>3 seeds), more photonic modes (12–20), and alternative feature extraction (Fock probabilities, bunched expectations)
+- Explore **temporal pooling** — varying the number of memory steps (currently 3) as a hyperparameter
+- Compare Perceval/MerLin photonic QRC with gate-based QRC implementations (Qiskit, PennyLane) to isolate the contribution of photonic nonlinearity
+
+---
+
+## Attribution
+
+This project originated at the Girls In Quantum Q-Volution Hackathon. **All work in this branch — architecture design, implementation, noise analysis, and evaluation — is entirely independent solo work** extending well beyond the original hackathon scope.

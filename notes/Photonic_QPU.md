@@ -1,4 +1,4 @@
-# What is a Photonic Quantum Processing Unit?
+A# What is a Photonic Quantum Processing Unit?
 ## Brick 1: Photon generation
 Quandela uses quantum dots as the single photon source, which generate individual photons to be used as qubits. A quantum dot is a laser excites electrons to a higher energy level. When the electrons fall back down to its ground state, the quantum dot emits a single photon. 80M photons can be generated per second.
 ## Brick 2: Quantum interconnects
@@ -30,3 +30,33 @@ U = eiϕ0 (eiϕR   e−iϕT
 ```
 
 **The HOM effect**: The Hong-Ou-Mandel (HOM) effect is a fundamental phenomenon in quantum optics that demonstrates the interference of indistinguishable photons. When two identical photons enter a balanced beam splitter, one in each input mode, they will always exit together in the same output mode due to quantum interference. This behaviour is purely quantum and cannot be explained by classical physics.
+
+---
+
+## Hardware Noise Parameters (Perceval NoiseModel)
+
+Real photonic processors are imperfect. Perceval's `NoiseModel` captures the five main sources of noise:
+
+### Brightness (η)
+Probability that the photon source actually emits a photon when triggered. A perfect source has η=1 (every trigger produces a photon). Real quantum dots achieve η≈0.08–0.30. Lower brightness means fewer photons are detected per circuit execution, requiring more shots to build reliable statistics and degrading output quality.
+
+### Indistinguishability (M)
+How identical the emitted photons are. Quantum interference — the entire basis of photonic computing — *only works* when photons are truly indistinguishable. M=1 means perfect indistinguishability; M=0.92 means 8% of the time photons behave like classical particles and fail to interfere correctly. This directly degrades the HOM effect described above: partial distinguishability means the |1,1⟩ output (which should have probability 0) starts appearing.
+
+### g² (second-order autocorrelation)
+Measures multi-photon emission. An ideal single-photon source has g²=0 — it emits exactly one photon per trigger. g²=0.01 means roughly 1% of emissions actually produce two photons instead of one. This corrupts the Fock state you intended to prepare (e.g., you wanted |1,0,1,0,...⟩ but sometimes get |2,0,1,0,...⟩), introducing errors in the computation.
+
+### Transmittance (T)
+Fraction of photons that survive travelling through the chip's waveguides to reach the detectors. Photons can be absorbed or scattered by imperfections in the waveguide material. T=0.1 means 90% photon loss — extremely lossy. T=0.2 is more optimistic but still means 80% loss. Higher transmittance = more photons reach detectors = better signal.
+
+### Phase imprecision (δφ)
+Random error on the phase shifter angles. When you programme a phase shifter to apply φ=1.23 radians, the hardware actually applies φ=1.23±δφ. This means the unitary transformation your circuit implements isn't exactly what you designed. δφ=0.05 is relatively small; δφ=0.10 (pessimistic profile) means ±0.1 radian jitter on every phase shifter in the circuit, which compounds across many components.
+
+### Noise profiles used in this project
+
+| Profile | η | M | g² | T | δφ | Intent |
+|---------|:---:|:---:|:---:|:---:|:---:|--------|
+| Perfect | — | — | — | — | — | Ideal simulation (no noise) |
+| Hardware | 0.15 | 0.92 | 0.01 | 0.1 | 0.05 | Typical near-term QPU |
+| Optimistic | 0.30 | 0.96 | 0.005 | 0.2 | 0.02 | Best plausible near-term |
+| Pessimistic | 0.08 | 0.85 | 0.03 | 0.05 | 0.10 | Worst-case scenario |

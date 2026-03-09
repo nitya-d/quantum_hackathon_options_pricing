@@ -15,6 +15,8 @@
 
 *6 test days × 224 instruments. QLIKE = ratio − ln(ratio) − 1 (lower is better).*
 
+**Contents:** [Motivation](#motivation) · [Quick Start](#quick-start) · [Repository Structure](#repository-structure) · [Literature](#literature--background) · [Approach](#approach) · [Results](#results) · [Planned Work](#planned-work) · [Skills & Techniques](#skills--techniques)
+
 ---
 
 ## Motivation
@@ -75,8 +77,12 @@ Two additional notebooks (`A1_FirstQuantumLayers_with_MerLin.ipynb`, `A2_HOM_Per
 │   ├── qrc_noisy_features.npz     # Cached single-seed noisy quantum features
 │   └── qrc_noisy_features_ensemble.npz  # Cached ensemble noisy quantum features
 ├── results/                    # Saved plots (PNG)
-└── notes/                      # Strategy docs, research notes & expansion plans
+└── notes/
+    ├── QRC_swaption_pricing.md # Problem decomposition & QRC design rationale
+    └── Photonic_QPU.md         # Photonic hardware primer & noise parameter reference 
 ```
+
+See [QRC_swaption_pricing.md](notes/QRC_swaption_pricing.md) for a from-scratch breakdown of swaptions, the forecasting task, and why QRC fits, and [Photonic_QPU.md](notes/Photonic_QPU.md) for photonic QPU hardware background and detailed noise parameter explanations.
 
 ---
 
@@ -140,17 +146,6 @@ To test real-world viability, the same ensemble is re-evaluated under Perceval's
 | Optimistic | 0.30 | 0.96 | 0.005 | 0.2 | 0.02 |
 | Pessimistic | 0.08 | 0.85 | 0.03 | 0.05 | 0.10 |
 
-<details>
-<summary><strong>What do these noise parameters mean?</strong></summary>
-
-- **Brightness (η)** — Probability the photon source emits a photon when triggered. η=0.15 means only 15% of triggers produce a photon; fewer detected photons = noisier statistics.
-- **Indistinguishability (M)** — How identical the photons are. Quantum interference only works with indistinguishable photons; M=0.92 means 8% of photons behave classically and fail to interfere.
-- **g² (second-order correlation)** — Multi-photon emission rate. Ideally g²=0 (perfect single-photon source); g²=0.01 means ~1% of emissions produce 2 photons instead of 1, corrupting the intended Fock state.
-- **Transmittance (T)** — Fraction of photons surviving the chip's waveguides. T=0.1 means 90% photon loss — very lossy.
-- **Phase imprecision (δφ)** — Random error on phase shifter angles. The circuit's unitary transformation deviates from design by ±δφ.
-
-</details>
-
 Raw Perceval `Processor` objects are used (MerLin's `QuantumLayer` bypasses noise), with the same frozen circuit parameters extracted from saved `.pt` files.
 
 ---
@@ -188,20 +183,37 @@ All three noisy QRC profiles cluster at QLIKE 0.0011–0.0013 — essentially th
 
 ## Planned Work
 
-### Phase 2 — Real Market Data
+### Phase 2 — Real Market Data (~2–3 days)
 - Source SPX swaption implied-volatility data (OptionMetrics via WRDS, or free CBOE delayed data)
 - Retrain the full pipeline (PCA → QRC → Ridge) on real surfaces and re-evaluate all models
 - Even one asset class would validate whether the QRC advantage transfers from synthetic to real market dynamics
 
-### Noise Mitigation & Hardware
+### Pipeline Refactor (~1 day)
+- Consolidate notebooks into a single reproducible `run_pipeline.py` with a config-driven interface (YAML/dataclass) for all hyperparameters (modes, photons, PCA dims, window size, seeds, noise profiles)
+- Decouple data loading, feature extraction, model training, and evaluation into importable modules under `src/`
+- Add CLI flags for sweep vs known-ensemble vs single-seed modes
+- Pin random seeds end-to-end for full reproducibility; add `pip freeze` lockfile
+
+### Noise Mitigation & Hardware (~1–2 weeks, dependent on QPU access)
 - Apply **Zero-Noise Extrapolation (ZNE)** — run the circuit at multiple noise scales, extrapolate to zero noise — to close the 26–46% noise penalty
 - Execute on **Quandela Cloud QPU** to compare real hardware output against simulated noise profiles
 - Benchmark photon loss rates and fidelity against the pessimistic/hardware profiles used here
 
-### Scaling & Architecture
+### Scaling & Architecture (ongoing)
 - Larger ensembles (>3 seeds), more photonic modes (12–20), and alternative feature extraction (Fock probabilities, bunched expectations)
 - Explore **temporal pooling** — varying the number of memory steps (currently 3) as a hyperparameter
 - Compare Perceval/MerLin photonic QRC with gate-based QRC implementations (Qiskit, PennyLane) to isolate the contribution of photonic nonlinearity
+- Profile simulation time vs circuit size to identify practical scaling limits for classical simulation and where QPU handoff becomes necessary
+
+---
+
+## Skills & Techniques
+
+| Domain | Techniques used |
+|---|---|
+| **Machine Learning** | PCA dimensionality reduction, MLP & LSTM baselines, hyperparameter sweeps, ensemble selection, RidgeCV regularisation, fair classical-vs-quantum comparison methodology |
+| **Quantum Computing** | Photonic QRC design (Perceval/MerLin), Fock-space feature extraction, hardware-realistic noise modelling (5-parameter NoiseModel), parameter management across simulation backends |
+| **Quantitative Finance** | Swaption implied-volatility surface forecasting, QLIKE loss, rolling-window train/val/test protocol, out-of-sample evaluation on held-out data |
 
 ---
 

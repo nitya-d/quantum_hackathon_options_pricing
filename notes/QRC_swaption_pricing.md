@@ -1,60 +1,54 @@
-# Problem breakdown
+﻿# Problem breakdown
 
 ## 1. Understanding the Asset: What is a Swaption?
-Imagine you are a company that took out a loan with a floating interest rate (it changes every month). If rates go up, your loan gets expensive. You want insurance.
+Consider a company that took out a loan with a floating interest rate (one that resets periodically). If rates rise, the loan becomes expensive. The company wants insurance.
 
-The Swap: A contract where you trade your "Floating" rate for a "Fixed" rate.
+**Swap:** A contract to exchange a floating rate for a fixed rate.
 
-The Swaption: An option to enter that swap later. It gives you the right, but not the obligation, to lock in a specific interest rate (the Strike) at a future date.
+**Swaption:** An option to enter that swap at a future date — the right, but not the obligation, to lock in a specific interest rate (the strike).
 
-The Two Dimensions of the data: The dataset isn't just a list of prices; it’s a surface. Every swaption is defined by two time-based variables:
-- Maturity (Expiry): When do you have to decide if you want the swap? (e.g., in 2 years).
-- Tenor: If you say "yes," how long does the swap last? (e.g., for 5 years).
+**The Two Dimensions:** The dataset is not a flat list of prices; it is a *surface*. Every swaption is defined by two time-based variables:
+- **Maturity (Expiry):** When must the decision to enter the swap be made? (e.g., in 2 years).
+- **Tenor:** If exercised, how long does the swap last? (e.g., for 5 years).
 
-In the dataset, we have columns for Maturity, Tenor, and Price. Because these are all connected (a 2-year option on a 5-year swap is mathematically related to a 3-year option on a 4-year swap), the prices form a smooth "surface." The job is to predict how this whole surface moves over time.
+The dataset contains columns for Maturity, Tenor, and Price. Because these are interconnected (a 2-year option on a 5-year swap is mathematically related to a 3-year option on a 4-year swap), the prices form a smooth surface. The task is to predict how this entire surface evolves over time.
 
 ## 2. The Task: Prediction vs. Imputation
-We have a Time-Series of Surfaces.
+The data is a time-series of surfaces.
 
-Task 1 (Future Prediction): You have the "weather" (swaption prices) for Monday through Friday. Predict the weather for next Monday.
+**Task 1 (Future Prediction):** Given swaption prices for days 1â€“5, predict the surface on day 6.
 
-Task 2 (Imputation): You have the data for Wednesday, but some specific grid points (e.g., the 2Y into 5Y price) are missing. You need to use the surrounding data to "fill in the blanks."
+**Task 2 (Imputation):** Given a surface with missing grid points (e.g., the 2Y-into-5Y price), infer the missing values from surrounding data.
 
 ## 3. Why Quantum Reservoir Computing (QRC)?
-The problem statement mentions QRC. To understand this, think of a pool of water:
+Analogy: a pool of water.
 
-Input: You throw a "stone" (the data) into the water.
+**Input:** A "stone" (the data) is dropped into the water.
 
-The Reservoir: The water ripples in complex, non-linear ways. In this case, a fixed quantum circuit acts as the water. It turns your simple input data into a very complex quantum state.
+**The Reservoir:** The water ripples in complex, nonlinear ways. Here, a fixed quantum circuit plays the role of the water â€” it maps simple input data into a high-dimensional quantum state.
 
-The Readout: You observe the ripples and use a simple classical model (like Linear Regression) to map those ripples to a price.
+**The Readout:** The ripples are observed and a simple classical model (e.g., Ridge regression) maps them to a price.
 
-Why use it? Quantum systems are naturally good at creating complex, high-dimensional "ripples" (features) that classical computers struggle to simulate. Since the reservoir (the quantum circuit) is fixed and not trained, you avoid the "Barren Plateau" problem (a common issue where quantum neural networks stop learning).
+**Why QRC?** Quantum systems naturally produce complex, high-dimensional features that are expensive to simulate classically. Because the reservoir (the quantum circuit) is fixed and never trained, the barren plateau problem â€” where variational quantum circuits stop learning â€” is avoided entirely.
 
-# The how:
+# Implementation
 ## 1. The Core Strategy: Quantum Reservoir Computing (QRC)
-We are using a **hybrid model** where a quantum system (the reservoir) does the heavy lifting of finding complex patterns in financial data, while a classical computer handles the final prediction.
-*   **The Big Advantage:** Unlike standard Quantum Neural Networks, we **do not train the quantum circuit**. The internal "quantum sloshing" is random and fixed. This avoids common training hurdles like "barren plateaus" (where the model stops learning) and makes training much faster for a hackathon timeline.
-*   **Efficiency:** It is specifically designed for noisy, near-term hardware (like the Quandela QPU) because it uses the natural, "scrambled" dynamics of the qubits to extract features.
+A **hybrid model** where a quantum system (the reservoir) handles nonlinear feature extraction from financial data, while a classical readout layer produces the final prediction.
+*   **Key Advantage:** Unlike variational Quantum Neural Networks, the quantum circuit is **never trained**. Its internal dynamics are random and frozen. This sidesteps barren plateaus and makes the training loop purely classical (fast).
+*   **NISQ Suitability:** The approach is well-suited to noisy, near-term hardware (e.g., Quandela QPU) because it leverages the natural scrambling dynamics of photonic modes to extract features â€” noise is part of the computation, not purely detrimental.
 
 ## 2. How the "Memory" Works
-Swaption prices depend heavily on historical trends ("memory effects"). Our QRC model needs to handle this through a three-step **iterative loop**:
-*   **Input vs. Hidden Qubits:** We divide our modes into two groups. **Input qubits** receive the raw financial data for a specific day, while **hidden qubits** act as the "memory".
-*   **The Iteration:** For example we feed in data from _t-3_, let it scramble across the qubits, and then discard the input qubits while keeping the **hidden qubits**. We then feed in data from _t-2_ and _t-1_ into new input qubits.
-*   **Persistence:** This process allows the quantum state to carry information from the past forward, allowing the model to "remember" previous market conditions when making a prediction for the future.
+Swaption prices depend heavily on historical trends (memory effects). The QRC handles this through a multi-step **iterative loop**:
+*   **Input vs. Hidden Modes:** The photonic modes are divided into two groups. **Input modes** receive the encoded financial data for a specific day; **hidden modes** act as memory.
+*   **The Iteration:** Data from *tâˆ’3* is fed into the input modes and allowed to scramble across the circuit. The input modes are then discarded while the **hidden modes** are retained. Data from *tâˆ’2* and *tâˆ’1* are fed in sequentially in the same way.
+*   **Persistence:** This process carries information from past time steps forward through the hidden-mode quantum state, enabling the reservoir to "remember" previous market conditions when producing features for the current prediction.
 
 ## 3. Data Handling: Encoding & Features
-*   **Encoding (The Constraint):** Since we cannot use amplitude encoding, we must use **Phase/Angle Encoding**. We take our swaption data (prices, maturities, tenors), scale them between -π and +π, and use those numbers as **rotation angles (RY gates)** for the photons.
-*   **Key Features:** Research shows that **lagged volatility RV_{t-1}** is the most important factor. Other critical features include Market Excess Returns (MKT), Short-Term Reversal factors (STR), and interest rate indicators like the Default Spread (DEF).
-*   **Feature Selection:** Because we are limited to **20–24 modes**, we can't use every piece of data. We should use a **forward selection** process: start with one feature, see if it helps, then add the next best one until the model's performance peaks.
+*   **Encoding:** Amplitude encoding is not available on photonic hardware, so **angle encoding** is used instead. Swaption data (prices, maturities, tenors) is scaled to [0, Ï€] and applied as rotation angles on the photonic modes.
+*   **Key Features:** Literature identifies **lagged volatility RV_{tâˆ’1}** as the most predictive input. Other important features include Market Excess Returns (MKT), Short-Term Reversal factors (STR), and interest rate indicators like the Default Spread (DEF).
+*   **Feature Selection:** With a limited mode budget (e.g., 10â€“24 modes), not all features can be encoded simultaneously. A **forward selection** process is appropriate: start with one feature, evaluate performance, and add the next best feature iteratively until performance plateaus.
 
-## 4. Evaluation: How to Win
-To produce a high-quality "Advanced" solution, we need to look beyond accuracy:
-*   **The "Dangerous" Error:** In finance, underestimating risk is much more dangerous than overestimating it. 
-*   **QLIKE Metric:** Instead of just using Mean Squared Error (MSE), we should use the **Quasi-Likelihood (QLIKE)** metric. It specifically **penalizes under-predictions** more heavily, which is essential for accurate derivative pricing.
-*   **Imputation (Level 2):** Since some data is missing, the reservoir’s ability to map inputs into a high-dimensional space will help the classical layer "infer" the missing values based on how they correlate with known points on the pricing surface.
-
-## Team Action Plan
-1.  **Select the Subset:** Identify the 7–10 most important swaption data points (Maturity/Tenor pairs) to fit within our mode limits.
-2.  **Map the Loop:** Set up the iterative encoding-evolution-trace loop to capture the "memory" of interest rate shifts.
-3.  **Classical Readout:** Train a simple classical model to take the final quantum measurement and output the full 2D pricing surface.
+## 4. Evaluation Metrics
+*   **Asymmetric Risk:** In finance, underestimating risk is far more costly than overestimating it.
+*   **QLIKE Metric:** The **Quasi-Likelihood (QLIKE)** loss (ratio − ln(ratio) − 1) penalises under-predictions more heavily than MSE, making it the standard evaluation metric for volatility forecasting in quantitative finance.
+*   **Imputation (Level 2):** For missing data points, the reservoir's high-dimensional feature space enables the classical readout layer to infer missing values from their correlation with known points on the pricing surface.

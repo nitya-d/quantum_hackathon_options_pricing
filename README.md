@@ -1,6 +1,6 @@
 # Quantum Reservoir Computing for Swaption Volatility Forecasting
 
-> **TL;DR** — A photonic Quantum Reservoir Computer (10 modes, 5 photons) beats an LSTM baseline by 19% on swaption implied-volatility surface forecasting (QLIKE 0.000879 vs 0.001081). Under hardware-realistic noise the advantage narrows to parity, but all noisy profiles still outperform MLP by >3×.
+> **TLDR**: A photonic Quantum Reservoir Computer (10 modes, 5 photons) beats an LSTM baseline by 19% on swaption implied-volatility surface forecasting (QLIKE 0.000879 vs 0.001081). Under hardware-realistic noise the advantage narrows to parity, but all noisy profiles still outperform MLP by >3×.
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue) ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-red) ![Perceval](https://img.shields.io/badge/Perceval-1.1-blueviolet) ![MerLin](https://img.shields.io/badge/MerLin-0.3-blueviolet) ![scikit-learn](https://img.shields.io/badge/scikit--learn-1.0+-orange) ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -15,7 +15,8 @@
 
 *6 test days × 224 instruments. QLIKE = ratio − ln(ratio) − 1 (lower is better).*
 
-**Contents:** [Motivation](#motivation) · [Quick Start](#quick-start) · [Repository Structure](#repository-structure) · [Literature](#literature--background) · [Approach](#approach) · [Results](#results) · [Planned Work](#planned-work) · [Skills & Techniques](#skills--techniques)
+## Contents:
+[Motivation](#motivation) · [Quick Start](#quick-start) · [Repository Structure](#repository-structure) · [Literature](#literature--background) · [Approach](#approach) · [Results](#results) · [Planned Work](#planned-work) · [Skills & Techniques](#skills--techniques)
 
 ---
 
